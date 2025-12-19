@@ -1,11 +1,11 @@
 name: Build iOS IPA for AltStore
 
 on:
-  workflow_dispatch: # يسمح لك بتشغيل البناء يدوياً بضغطة زر
+  workflow_dispatch:
 
 jobs:
   build-ios:
-    runs-on: macos-13 # نستخدم خادم ماك إجبارياً
+    runs-on: macos-latest # تم التحديث لاستخدام أحدث نسخة ماك متوفرة
     steps:
       - uses: actions/checkout@v3
 
@@ -24,17 +24,14 @@ jobs:
           channel: 'stable'
 
       - name: Build Flet App Structure
-        # نقوم بإنشاء هيكل المشروع فقط دون محاولة البناء النهائي لتجنب طلب الشهادات الآن
         run: |
           flet create . 
           
       - name: Build Unsigned iOS App
-        # هنا السحر: نبني التطبيق بدون توقيع (No Codesign) لتقبله AltStore
         run: |
           flutter build ios --release --no-codesign
 
       - name: Create IPA File
-        # AltStore يحتاج ملف ipa، ونحن لدينا ملف app. لذا سنقوم بضغطه يدوياً
         run: |
           mkdir Payload
           mv build/ios/iphoneos/Runner.app Payload/
