@@ -15,8 +15,8 @@ jobs:
           python-version: '3.11'
 
       - name: Install Flet
-        # سنستخدم نسخة مستقرة جداً ومجربة
-        run: pip install flet==0.22.1
+        # نعود لاستخدام أحدث نسخة لأننا سنعالج المشكلة يدوياً
+        run: pip install flet
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -27,53 +27,49 @@ jobs:
       - name: Install CocoaPods
         run: sudo gem install cocoapods
 
-      - name: Create Requirements
+      - name: Create Requirements File
+        # إضافة كافة المكتبات الضرورية لتجنب الأخطاء
         run: |
-          echo "flet==0.22.1" > requirements.txt
+          echo "flet" > requirements.txt
           echo "certifi" >> requirements.txt
           echo "typing_extensions" >> requirements.txt
           echo "urllib3" >> requirements.txt
           echo "requests" >> requirements.txt
+          echo "charset-normalizer" >> requirements.txt
+          echo "idna" >> requirements.txt
 
-      - name: Generate Project Source Code
-        # نطلب من Flet توليد الكود فقط في مجلد build_env دون البناء
+      - name: Build IPA
+        # نستخدم أمر البناء الناجح الذي استخدمناه سابقاً
         run: |
-          flet build ipa --project build_env --verbose
+          flet build ipa . --project StudentApp --flutter-build-args="--no-codesign" --verbose
 
-      - name: FIX WHITE SCREEN (Disable Impeller)
-        # هذه هي الخطوة الجديدة والسحرية
-        # نقوم بحقن أمر تعطيل المحرك الجديد في إعدادات التطبيق
+      - name: FIX WHITE SCREEN (Patch Info.plist)
+        # هذه هي الخطوة الجديدة:
+        # نبحث عن التطبيق المبني (Runner.app) ونعدل إعداداته مباشرة
+        # لإجبار الايفون على عدم استخدام محرك Impeller
         run: |
-          cd build_env/ios/Runner
-          # أمر لإضافة مفتاح إلغاء Impeller
-          /usr/libexec/PlistBuddy -c "Add :FLTEnableImpeller bool false" Info.plist
-          # طباعة الملف للتأكد (اختياري)
-          cat Info.plist
-
-      - name: Disable Code Signing
-        # تعطيل التوقيع يدوياً كما تعودنا
-        run: |
-          cd build_env/ios
-          sed -i '' 's/CODE_SIGNING_ALLOWED = YES/CODE_SIGNING_ALLOWED = NO/g' Runner.xcodeproj/project.pbxproj
-          sed -i '' 's/CODE_SIGNING_REQUIRED = YES/CODE_SIGNING_REQUIRED = NO/g' Runner.xcodeproj/project.pbxproj
-          sed -i '' 's/CODE_SIGN_IDENTITY = "iPhone Developer";/CODE_SIGN_IDENTITY = "";/g' Runner.xcodeproj/project.pbxproj
-
-      - name: Build IPA Manually
-        # الآن نبني التطبيق باستخدام المحرك القديم
-        run: |
-          cd build_env
-          flutter build ios --release --no-codesign
-
-      - name: Package IPA
-        run: |
-          mkdir Payload
-          APP_PATH=$(find build_env/build/ios/iphoneos -name "Runner.app" -type d | head -n 1)
+          # العثور على مسار التطبيق الناتج
+          APP_PATH=$(find . -name "Runner.app" -type d | head -n 1)
           
           if [ -z "$APP_PATH" ]; then
             echo "Error: Runner.app not found!"
             exit 1
           fi
           
+          echo "Found App at: $APP_PATH"
+          
+          # استخدام أداة PlistBuddy لإضافة مفتاح تعطيل Impeller داخل التطبيق الجاهز
+          # هذا السطر يفتح ملف الإعدادات ويضيف السطر السحري
+          /usr/libexec/PlistBuddy -c "Add :FLTEnableImpeller bool false" "$APP_PATH/Info.plist"
+          
+          echo "Successfully patched Info.plist to disable Impeller"
+
+      - name: Package IPA
+        run: |
+          mkdir Payload
+          APP_PATH=$(find . -name "Runner.app" -type d | head -n 1)
+          
+          # نقل التطبيق (المعدل) إلى مجلد Payload
           cp -r "$APP_PATH" Payload/
           zip -r StudentApp.ipa Payload
 
