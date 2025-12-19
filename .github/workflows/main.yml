@@ -26,19 +26,22 @@ jobs:
       - name: Install CocoaPods
         run: sudo gem install cocoapods
 
-      - name: Build IPA (Correct Syntax)
-        # التصحيح:
-        # 1. أضفنا النقطة "." لنخبره أن الكود في المجلد الحالي
-        # 2. وضعنا علامة "=" لتمرير أمر عدم التوقيع بشكل صحيح
+      - name: Create Requirements File
+        # هذه الخطوة الجديدة:
+        # نقوم بإنشاء ملف متطلبات ونضع فيه المكتبات الضرورية
+        # certifi هي المكتبة التي تسبب الخطأ، أضفناها الآن يدوياً
+        run: |
+          echo "flet" > requirements.txt
+          echo "certifi" >> requirements.txt
+
+      - name: Build IPA (With Requirements)
+        # الآن عند البناء، سيجد Flet ملف requirements.txt ويقوم بتضمين المكتبات
         run: |
           flet build ipa . --project StudentApp --flutter-build-args="--no-codesign" --verbose
 
       - name: Locate and Package IPA
-        # البحث عن ملف التطبيق الناتج وضغطه
         run: |
           mkdir Payload
-          # البحث عن ملف Runner.app الذي نتج عن البناء
-          # نستخدم find لأنه قد يكون في مجلد build/ios أو مجلد مؤقت
           APP_PATH=$(find . -name "Runner.app" -type d | head -n 1)
           
           if [ -z "$APP_PATH" ]; then
@@ -48,10 +51,7 @@ jobs:
           
           echo "Found App at: $APP_PATH"
           
-          # نسخ التطبيق للمجلد
           cp -r "$APP_PATH" Payload/
-          
-          # ضغطه
           zip -r StudentApp.ipa Payload
 
       - name: Upload IPA
