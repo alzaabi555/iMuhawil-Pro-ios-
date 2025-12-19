@@ -26,29 +26,36 @@ jobs:
       - name: Install CocoaPods
         run: sudo gem install cocoapods
 
-      - name: Build IPA (Fixed Command)
-        # الإصلاح: أضفنا اسماً للمشروع (MyStudentApp) واستخدمنا الطريقة الصحيحة لتمرير أمر عدم التوقيع
+      - name: Prepare Project
+        # 1. ننشئ مجلداً جديداً نظيفاً تماماً اسمه build_env
+        # 2. ننقل ملف الكود main.py إليه
         run: |
-          flet build ipa --project MyStudentApp --flutter-build-args --no-codesign --verbose
+          flet create build_env
+          cp main.py build_env/
+          if [ -f requirements.txt ]; then cp requirements.txt build_env/; fi
 
-      - name: Locate and Package IPA
-        # البحث عن الملف الناتج وضغطه
+      - name: Disable Code Signing in Xcode Project
+        # هذه الخطوة تعدل إعدادات ملف المشروع مباشرة لإلغاء طلب الشهادات
+        # هذا ضروري جداً لأن أمر --no-codesign وحده لا يكفي أحياناً
+        run: |
+          cd build_env/ios
+          sed -i '' 's/CODE_SIGNING_ALLOWED = YES/CODE_SIGNING_ALLOWED = NO/g' Runner.xcodeproj/project.pbxproj
+          sed -i '' 's/CODE_SIGNING_REQUIRED = YES/CODE_SIGNING_REQUIRED = NO/g' Runner.xcodeproj/project.pbxproj
+          sed -i '' 's/CODE_SIGN_IDENTITY = "iPhone Developer";/CODE_SIGN_IDENTITY = "";/g' Runner.xcodeproj/project.pbxproj
+
+      - name: Build IPA Manually
+        # الآن نطلب من فلاتر البناء مباشرة
+        # نحن الآن داخل المجلد الصحيح build_env
+        run: |
+          cd build_env
+          flutter build ios --release --no-codesign
+
+      - name: Package IPA
+        # تجميع التطبيق الناتج
         run: |
           mkdir Payload
-          # نبحث عن ملف التطبيق الناتج أينما كان
-          APP_PATH=$(find . -name "Runner.app" -type d | head -n 1)
-          
-          if [ -z "$APP_PATH" ]; then
-            echo "Error: Runner.app not found!"
-            exit 1
-          fi
-          
-          echo "Found App at: $APP_PATH"
-          
-          # نسخ التطبيق للمجلد الجديد
-          cp -r "$APP_PATH" Payload/
-          
-          # ضغطه بصيغة ipa
+          # المسار معروف الآن بدقة لأننا بنيناه يدوياً
+          mv build_env/build/ios/iphoneos/Runner.app Payload/
           zip -r StudentApp.ipa Payload
 
       - name: Upload IPA
