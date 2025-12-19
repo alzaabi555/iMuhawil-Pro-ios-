@@ -26,28 +26,34 @@ jobs:
       - name: Install CocoaPods
         run: sudo gem install cocoapods
 
-      - name: Build IPA with No Codesign
-        # هنا التغيير الجذري: نطلب من Flet البناء ونمرر له أمر عدم التوقيع
-        run: |
-          # 1. إنشاء المشروع
-          flet create .
-          
-          # 2. البناء (لاحظ العلامة -- التي تمرر الأوامر لداخل فلاتر)
-          # هذه العلامة تجبره على عدم طلب شهادة مطور
-          flet build ipa -- --no-codesign
+      - name: Generate Flutter Project Only
+        # هنا التعديل: نطلب منه إنشاء ملفات المشروع فقط دون محاولة البناء
+        # هذا سينتج مجلداً اسمه build/ipa
+        run: flet build ipa --project
 
-      - name: Locate and Package IPA
-        # بما أننا لا نعرف أين يضع Flet الملف بالضبط، سنبحث عنه وننقله
+      - name: Disable Code Signing Manually
+        # الآن ندخل لملفات المشروع ونعطل التوقيع بالقوة
+        run: |
+          cd build/ipa/ios
+          sed -i '' 's/CODE_SIGNING_ALLOWED = YES/CODE_SIGNING_ALLOWED = NO/g' Runner.xcodeproj/project.pbxproj
+          sed -i '' 's/CODE_SIGNING_REQUIRED = YES/CODE_SIGNING_REQUIRED = NO/g' Runner.xcodeproj/project.pbxproj
+          sed -i '' 's/CODE_SIGN_IDENTITY = "iPhone Developer";/CODE_SIGN_IDENTITY = "";/g' Runner.xcodeproj/project.pbxproj
+
+      - name: Build IPA Manually
+        # الآن نبني التطبيق يدوياً باستخدام فلاتر مباشرة
+        run: |
+          cd build/ipa
+          flutter build ios --release --no-codesign
+
+      - name: Package IPA
+        # تجميع الناتج
         run: |
           mkdir Payload
-          # البحث عن ملف التطبيق (Runner.app)
-          APP_PATH=$(find . -name "Runner.app" -type d | head -n 1)
+          # نبحث عن التطبيق داخل مجلد البناء الجديد
+          APP_PATH=$(find build/ipa/build/ios/iphoneos -name "Runner.app" -type d | head -n 1)
           echo "Found App at: $APP_PATH"
           
-          # نقله للمجلد
-          mv "$APP_PATH" Payload/
-          
-          # ضغطه
+          cp -r "$APP_PATH" Payload/
           zip -r StudentApp.ipa Payload
 
       - name: Upload IPA
