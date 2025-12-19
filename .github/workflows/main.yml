@@ -15,7 +15,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install Flet
-        # نعود لاستخدام أحدث نسخة لأننا سنعالج المشكلة يدوياً
+        # نستخدم أحدث نسخة مستقرة
         run: pip install flet
 
       - name: Setup Flutter
@@ -28,7 +28,7 @@ jobs:
         run: sudo gem install cocoapods
 
       - name: Create Requirements File
-        # إضافة كافة المكتبات الضرورية لتجنب الأخطاء
+        # القائمة الكاملة للمكتبات لمنع أي توقف
         run: |
           echo "flet" > requirements.txt
           echo "certifi" >> requirements.txt
@@ -39,37 +39,36 @@ jobs:
           echo "idna" >> requirements.txt
 
       - name: Build IPA
-        # نستخدم أمر البناء الناجح الذي استخدمناه سابقاً
+        # البناء العادي
         run: |
           flet build ipa . --project StudentApp --flutter-build-args="--no-codesign" --verbose
 
-      - name: FIX WHITE SCREEN (Patch Info.plist)
-        # هذه هي الخطوة الجديدة:
-        # نبحث عن التطبيق المبني (Runner.app) ونعدل إعداداته مباشرة
-        # لإجبار الايفون على عدم استخدام محرك Impeller
+      - name: FIX WHITE SCREEN (The Real Fix)
+        # هنا التعديل: نستخدم find للبحث عن ملف Info.plist أينما كان
+        # هذا يضمن نجاح الخطوة 100%
         run: |
-          # العثور على مسار التطبيق الناتج
-          APP_PATH=$(find . -name "Runner.app" -type d | head -n 1)
+          # البحث عن ملف Info.plist داخل مجلد Runner.app
+          PLIST_PATH=$(find . -name "Info.plist" | grep "Runner.app" | head -n 1)
           
-          if [ -z "$APP_PATH" ]; then
-            echo "Error: Runner.app not found!"
+          if [ -z "$PLIST_PATH" ]; then
+            echo "Error: Info.plist not found!"
             exit 1
           fi
           
-          echo "Found App at: $APP_PATH"
+          echo "Found Info.plist at: $PLIST_PATH"
           
-          # استخدام أداة PlistBuddy لإضافة مفتاح تعطيل Impeller داخل التطبيق الجاهز
-          # هذا السطر يفتح ملف الإعدادات ويضيف السطر السحري
-          /usr/libexec/PlistBuddy -c "Add :FLTEnableImpeller bool false" "$APP_PATH/Info.plist"
+          # تعطيل Impeller
+          /usr/libexec/PlistBuddy -c "Add :FLTEnableImpeller bool false" "$PLIST_PATH" || echo "Key already exists or failed"
           
-          echo "Successfully patched Info.plist to disable Impeller"
+          # تأكيد التعديل
+          cat "$PLIST_PATH" | grep "FLTEnableImpeller"
 
       - name: Package IPA
         run: |
           mkdir Payload
           APP_PATH=$(find . -name "Runner.app" -type d | head -n 1)
           
-          # نقل التطبيق (المعدل) إلى مجلد Payload
+          # نقل التطبيق وضغطه
           cp -r "$APP_PATH" Payload/
           zip -r StudentApp.ipa Payload
 
