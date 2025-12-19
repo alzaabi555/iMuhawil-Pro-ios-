@@ -26,36 +26,32 @@ jobs:
       - name: Install CocoaPods
         run: sudo gem install cocoapods
 
-      - name: Generate Flet Project (The Correct Way)
-        # هذا هو التعديل الجوهري:
-        # نستخدم flet build مع خيار --project لتوليد ملفات الايفون الصحيحة
-        # التي تحتوي على كود البايثون الخاص بك
-        # ونضعها في مجلد اسمه build_env
+      - name: Build IPA (Correct Syntax)
+        # التصحيح:
+        # 1. أضفنا النقطة "." لنخبره أن الكود في المجلد الحالي
+        # 2. وضعنا علامة "=" لتمرير أمر عدم التوقيع بشكل صحيح
         run: |
-          flet build ipa --project build_env --verbose
+          flet build ipa . --project StudentApp --flutter-build-args="--no-codesign" --verbose
 
-      - name: Disable Code Signing in Xcode Project
-        # الآن ندخل للمجلد الذي أنشأه Flet ونلغي التوقيع
-        run: |
-          cd build_env/ios
-          sed -i '' 's/CODE_SIGNING_ALLOWED = YES/CODE_SIGNING_ALLOWED = NO/g' Runner.xcodeproj/project.pbxproj
-          sed -i '' 's/CODE_SIGNING_REQUIRED = YES/CODE_SIGNING_REQUIRED = NO/g' Runner.xcodeproj/project.pbxproj
-          sed -i '' 's/CODE_SIGN_IDENTITY = "iPhone Developer";/CODE_SIGN_IDENTITY = "";/g' Runner.xcodeproj/project.pbxproj
-
-      - name: Build IPA Manually
-        # نقوم بالبناء اليدوي للتأكد من عدم طلب الشهادات
-        run: |
-          cd build_env
-          flutter build ios --release --no-codesign
-
-      - name: Package IPA
+      - name: Locate and Package IPA
+        # البحث عن ملف التطبيق الناتج وضغطه
         run: |
           mkdir Payload
-          # البحث عن التطبيق الناتج
-          APP_PATH=$(find build_env/build/ios/iphoneos -name "Runner.app" -type d | head -n 1)
+          # البحث عن ملف Runner.app الذي نتج عن البناء
+          # نستخدم find لأنه قد يكون في مجلد build/ios أو مجلد مؤقت
+          APP_PATH=$(find . -name "Runner.app" -type d | head -n 1)
+          
+          if [ -z "$APP_PATH" ]; then
+            echo "Error: Runner.app not found! Build failed."
+            exit 1
+          fi
+          
           echo "Found App at: $APP_PATH"
           
-          mv "$APP_PATH" Payload/
+          # نسخ التطبيق للمجلد
+          cp -r "$APP_PATH" Payload/
+          
+          # ضغطه
           zip -r StudentApp.ipa Payload
 
       - name: Upload IPA
