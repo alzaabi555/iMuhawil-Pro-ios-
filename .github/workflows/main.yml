@@ -5,7 +5,7 @@ on:
 
 jobs:
   build-ios:
-    runs-on: macos-latest # تم التحديث لاستخدام أحدث نسخة ماك متوفرة
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v3
 
@@ -22,19 +22,51 @@ jobs:
         with:
           flutter-version: '3.19.0'
           channel: 'stable'
+      
+      - name: Install CocoaPods
+        run: sudo gem install cocoapods
 
-      - name: Build Flet App Structure
+      - name: Create Project and Build
+        # دمجنا كل الخطوات هنا لضمان عدم ضياع المسار
         run: |
-          flet create . 
+          # 1. إنشاء مجلد نظيف للمشروع
+          mkdir ios_project
           
-      - name: Build Unsigned iOS App
-        run: |
+          # 2. نسخ الكود الخاص بك إلى هذا المجلد
+          cp main.py ios_project/
+          # نسخ ملف المتطلبات إذا وجد
+          if [ -f requirements.txt ]; then cp requirements.txt ios_project/; fi
+          
+          # 3. الدخول للمجلد (مهم جداً)
+          cd ios_project
+          
+          # 4. تحويل كود بايثون إلى مشروع فلاتر
+          echo "Creating Flet project..."
+          flet create .
+          
+          # 5. التأكد من أن الملفات تم إنشاؤها (للتشخيص)
+          ls -la
+          
+          # 6. تعطيل التوقيع الإجباري (Code Signing)
+          echo "Disabling Code Signing..."
+          cd ios
+          sed -i '' 's/CODE_SIGNING_ALLOWED = YES/CODE_SIGNING_ALLOWED = NO/g' Runner.xcodeproj/project.pbxproj
+          sed -i '' 's/CODE_SIGNING_REQUIRED = YES/CODE_SIGNING_REQUIRED = NO/g' Runner.xcodeproj/project.pbxproj
+          sed -i '' 's/CODE_SIGN_IDENTITY = "iPhone Developer";/CODE_SIGN_IDENTITY = "";/g' Runner.xcodeproj/project.pbxproj
+          
+          # العودة للمجلد الرئيسي للمشروع لبدء البناء
+          cd ..
+          
+          # 7. بناء التطبيق
+          echo "Building iOS App..."
           flutter build ios --release --no-codesign
 
-      - name: Create IPA File
+      - name: Package IPA
+        # تجميع التطبيق في ملف مضغوط
         run: |
           mkdir Payload
-          mv build/ios/iphoneos/Runner.app Payload/
+          # الانتباه للمسار الجديد
+          mv ios_project/build/ios/iphoneos/Runner.app Payload/
           zip -r StudentApp.ipa Payload
 
       - name: Upload IPA
