@@ -1,4 +1,4 @@
-name: Build Android APK (Manual SDK Fix)
+name: Build Android APK (Final Fix)
 
 on:
   workflow_dispatch:
@@ -14,7 +14,6 @@ jobs:
         with:
           python-version: '3.11'
 
-      # نستخدم Flet 0.21.2 المستقر
       - name: Install Flet
         run: pip install flet==0.21.2
 
@@ -24,7 +23,7 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # نستخدم Flutter 3.16.9 (الأمان من الشاشة البيضاء)
+      # نستخدم Flutter 3.16.9 لتجنب الشاشة البيضاء
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -53,24 +52,22 @@ jobs:
           
           cd app_build
           
-          # 1. إنشاء المشروع
+          # 1. إنشاء المشروع (نحدد الاسم والمنظمة هنا فقط)
           flutter create . --platforms android --org com.schoolapp --project-name student_app
           
           # 2. حذف الكود الافتراضي
           rm lib/main.dart
           
-          # 3. دمج كود بايثون
-          flet create . --description "المتابع المدرسي" --org com.schoolapp --project-name student_app
+          # 3. دمج كود بايثون (تم التصحيح: حذفنا الخيارات المكررة التي سببت الخطأ)
+          flet create . --description "المتابع المدرسي"
 
-      - name: FIX ANDROID SDK VERSION (The Key Fix)
-        # هنا نحل المشكلة: نجبر التطبيق على استخدام SDK 34
+      - name: FIX ANDROID SDK VERSION (Critical Fix)
+        # هذا التعديل ضروري لأن المكتبات الجديدة تطلب SDK 34
         run: |
           cd app_build/android/app
           
-          # تعديل ملف build.gradle
-          # نغير compileSdkVersion إلى 34
+          # تعديل ملف build.gradle لرفع الإصدار إلى 34
           sed -i 's/compileSdkVersion .*/compileSdkVersion 34/g' build.gradle
-          # نغير targetSdkVersion إلى 34
           sed -i 's/targetSdkVersion .*/targetSdkVersion 34/g' build.gradle
           
           echo "SDK Version updated to 34 ✅"
@@ -81,10 +78,10 @@ jobs:
           
           MANIFEST="AndroidManifest.xml"
           
-          # إضافة الأذونات
+          # إضافة أذونات قراءة الملفات
           sed -i 's|<application|<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>\n    <application|g' $MANIFEST
           
-          # تغيير الاسم للعربية
+          # تغيير اسم التطبيق للعربية
           sed -i 's/android:label="student_app"/android:label="المتابع المدرسي"/g' $MANIFEST
           
           echo "Permissions and Name updated ✅"
