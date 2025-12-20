@@ -1,4 +1,4 @@
-name: Build Android APK (Golden Stability)
+name: Build Android APK (Final Version 0.21.2)
 
 on:
   workflow_dispatch:
@@ -14,9 +14,9 @@ jobs:
         with:
           python-version: '3.11'
 
-      # نستخدم نسخة Flet 0.20.1 المستقرة والمتوافقة مع Flutter 3.16
+      # نستخدم الإصدار المتاح والمستقر 0.21.2
       - name: Install Flet
-        run: pip install flet==0.20.1
+        run: pip install flet==0.21.2
 
       - name: Setup Java
         uses: actions/setup-java@v3
@@ -24,7 +24,7 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # نستخدم Flutter 3.16.9 الخالي من مشاكل الشاشة البيضاء
+      # نستخدم Flutter 3.16.9 لتجنب الشاشة البيضاء
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -32,9 +32,9 @@ jobs:
           channel: 'stable'
 
       - name: Create Requirements File
-        # مهم جداً: نثبت نفس نسخة Flet في التطبيق أيضاً
+        # نحدث النسخة هنا أيضاً
         run: |
-          echo "flet==0.20.1" > requirements.txt
+          echo "flet==0.21.2" > requirements.txt
           echo "certifi" >> requirements.txt
           echo "typing_extensions" >> requirements.txt
           echo "urllib3" >> requirements.txt
@@ -53,8 +53,8 @@ jobs:
             echo "Warning: icon.png not found! Using default."
           fi
 
-      - name: Build APK (Auto Mode)
-        # الآن سيعمل البناء لأن النسختين (0.20.1 و 3.16.9) متوافقتين تماماً
+      - name: Build APK
+        # الآن الإصدارات متوافقة وموجودة
         run: |
           flet build apk . --project StudentApp --product "المتابع المدرسي" --verbose
 
