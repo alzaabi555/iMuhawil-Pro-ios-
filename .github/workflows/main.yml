@@ -27,8 +27,6 @@ jobs:
         run: sudo gem install cocoapods
 
       - name: Create Requirements File
-        # القائمة المعتمدة والآمنة للايفون
-        # لاحظ: لا يوجد pandas هنا، فقط openpyxl
         run: |
           echo "flet==0.22.1" > requirements.txt
           echo "certifi" >> requirements.txt
@@ -38,33 +36,47 @@ jobs:
           echo "charset-normalizer" >> requirements.txt
           echo "idna" >> requirements.txt
           echo "openpyxl" >> requirements.txt
-          echo "et-xmlfile" >> requirements.txt
+
+      - name: Prepare Icon
+        # خطوة إضافية لضمان وجود الأيقونة في المكان الصحيح
+        run: |
+          if [ -f "icon.png" ]; then
+            echo "Icon found! ✅"
+            # ننسخها لمجلد assets احتياطاً لأن بعض النسخ تبحث عنها هناك
+            mkdir -p assets
+            cp icon.png assets/icon.png
+          else
+            echo "Warning: icon.png not found in root! Using default icon."
+          fi
 
       - name: Build IPA (Auto Mode)
-        # نعود للبناء التلقائي، سيعمل الآن لأننا أزلنا pandas
+        # سيقوم Flet تلقائياً باكتشاف icon.png واستخدامه
         run: |
           flet build ipa . --project StudentApp --flutter-build-args="--no-codesign" --verbose
 
-      - name: FIX WHITE SCREEN (Final Patch)
-        # إصلاح الشاشة البيضاء بتعديل التطبيق الناتج
+      - name: CUSTOMIZE APP (Arabic Name & Fix White Screen)
         run: |
-          # 1. العثور على التطبيق
+          # 1. البحث عن التطبيق الناتج
           APP_PATH=$(find . -name "Runner.app" -type d | head -n 1)
           
           if [ -z "$APP_PATH" ]; then
-            echo "Error: Runner.app not found! Build failed."
+            echo "Error: Runner.app not found!"
             exit 1
           fi
           
           echo "Found App at: $APP_PATH"
-          
-          # 2. تعديل ملف الإعدادات لتعطيل Impeller
           PLIST_PATH="$APP_PATH/Info.plist"
           
+          # 2. تغيير اسم التطبيق إلى "المتابع المدرسي"
+          # استخدام PlistBuddy يضمن عدم ظهور رموز غريبة
+          /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName المتابع المدرسي" "$PLIST_PATH"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleName المتابع المدرسي" "$PLIST_PATH"
+          
+          # 3. إصلاح الشاشة البيضاء (تعطيل Impeller)
           /usr/libexec/PlistBuddy -c "Delete :FLTEnableImpeller" "$PLIST_PATH" || true
           /usr/libexec/PlistBuddy -c "Add :FLTEnableImpeller bool false" "$PLIST_PATH"
           
-          echo "Success: Impeller disabled."
+          echo "Success: App Name changed to Arabic & Impeller disabled."
 
       - name: Package IPA
         run: |
