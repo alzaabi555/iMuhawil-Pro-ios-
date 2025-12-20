@@ -15,7 +15,7 @@ class StudentApp:
         page.title = "سجل المتابعة الصفي"
         page.rtl = True
         page.theme_mode = ft.ThemeMode.LIGHT
-        page.scroll = "adaptive"
+        page.scroll = "auto"
         page.window_width = 400
         page.window_height = 700
 
@@ -120,3 +120,4 @@ class StudentApp:
 if __name__ == "__main__":
     app = StudentApp()
     ft.app(target=app.main)
+
