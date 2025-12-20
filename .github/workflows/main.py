@@ -12,7 +12,7 @@ class SchoolApp:
     def __init__(self):
         self.school_data = {}
         self.current_class = ""
-        self.selected_student_name = "" # لتخزين اسم الطالب المختار
+        self.selected_student_name = "" 
         self.selected_date = datetime.date.today().strftime("%Y-%m-%d")
 
     def main(self, page: ft.Page):
@@ -25,7 +25,7 @@ class SchoolApp:
         # --- إدارة البيانات ---
         def load_data():
             try:
-                # v8: نسخة جديدة لضمان توافق البيانات
+                # نستخدم نفس قاعدة البيانات v8 للحفاظ على بياناتك الحالية
                 data = page.client_storage.get("school_db_v8")
                 if isinstance(data, dict):
                     self.school_data = data
@@ -66,7 +66,7 @@ class SchoolApp:
                 self.selected_date = e.control.value.strftime("%Y-%m-%d")
                 date_button.text = f"التاريخ: {self.selected_date}"
                 if page.route == "/class":
-                    route_change(None) # تحديث الصفحة الحالية
+                    route_change(None) 
                 page.update()
 
         # --- دالة الاستيراد ---
@@ -86,7 +86,7 @@ class SchoolApp:
                     for row in sheet.iter_rows(values_only=True):
                         raw_rows.append([str(c) if c else "" for c in row])
                 
-                # CSV (الترميز الذكي)
+                # CSV
                 elif e.files[0].name.endswith('.csv'):
                     encodings_to_try = ['utf-8-sig', 'cp1256', 'windows-1256', 'iso-8859-6', 'utf-8']
                     success = False
@@ -136,19 +136,6 @@ class SchoolApp:
                 page.update()
 
         file_picker.on_result = on_file_picked
-
-        # --- دالة التصدير ---
-        def export_data(e):
-            if not self.current_class: return
-            students = self.school_data[self.current_class]
-            output = "الاسم\tالنقاط\tأيام الغياب\n"
-            for s in students:
-                absent_count = list(s.get('attendance', {}).values()).count('absent')
-                output += f"{s['name']}\t{s['score']}\t{absent_count}\n"
-            page.set_clipboard(output)
-            page.snack_bar = ft.SnackBar(ft.Text("تم النسخ للحافظة"), bgcolor="blue")
-            page.snack_bar.open = True
-            page.update()
 
         # --- إدارة التنقل (Router) ---
         def route_change(route):
@@ -208,7 +195,7 @@ class SchoolApp:
                     ], bgcolor="#f2f2f7")
                 )
 
-            # 2. صفحة الفصل: قائمة الطلاب
+            # 2. صفحة الفصل
             elif page.route == "/class":
                 students = self.school_data.get(self.current_class, [])
 
@@ -221,13 +208,12 @@ class SchoolApp:
 
                 def toggle_attendance(student):
                     att = student.get('attendance', {})
-                    # عكس الحالة الحالية
                     current = att.get(self.selected_date, "present")
                     new_st = "absent" if current == "present" else "present"
                     att[self.selected_date] = new_st
                     student['attendance'] = att
                     save_data()
-                    route_change(None) # تحديث الواجهة
+                    route_change(None)
 
                 def add_behavior(student, type_, note):
                     if 'history' not in student: student['history'] = []
@@ -278,8 +264,8 @@ class SchoolApp:
                         ft.AppBar(
                             title=ft.Text(self.current_class), bgcolor="indigo", color="white",
                             leading=ft.IconButton(ft.icons.ARROW_BACK, on_click=lambda _: page.go("/")),
+                            # تم حذف زر التصدير من هنا
                             actions=[
-                                ft.IconButton(ft.icons.COPY, on_click=export_data),
                                 ft.IconButton(ft.icons.UPLOAD_FILE, on_click=lambda _: file_picker.pick_files())
                             ]
                         ),
@@ -291,9 +277,8 @@ class SchoolApp:
                     ], bgcolor="#f2f2f7")
                 )
 
-            # 3. صفحة تفاصيل الطالب (مستقلة تماماً لحل مشكلة الرجوع)
+            # 3. صفحة تفاصيل الطالب (مع التصدير الكامل)
             elif page.route == "/student":
-                # البحث عن الطالب المختار
                 student = next((s for s in self.school_data[self.current_class] if s['name'] == self.selected_student_name), None)
                 
                 if student:
@@ -301,6 +286,35 @@ class SchoolApp:
                     absent_days = [d for d, st in attendance_log.items() if st == 'absent']
                     history = student.get('history', [])
                     
+                    # دالة التصدير الجديدة والشاملة
+                    def export_student_report(e):
+                        report = f"تقرير الطالب: {student['name']}\n"
+                        report += f"مجموع النقاط: {student['score']}\n"
+                        report += "-" * 25 + "\n"
+                        
+                        report += "--- سجل السلوكيات ---\n"
+                        if not history:
+                            report += "لا يوجد سجل سلوكيات\n"
+                        else:
+                            for rec in reversed(history):
+                                type_txt = "إيجابي" if rec['type'] == 'pos' else "سلبي"
+                                report += f"{rec['date']} | {type_txt} | {rec['note']}\n"
+                        
+                        report += "\n--- سجل الغياب ---\n"
+                        if not attendance_log:
+                            report += "لا يوجد سجل غياب\n"
+                        else:
+                            # ترتيب التواريخ
+                            sorted_dates = sorted(attendance_log.keys(), reverse=True)
+                            for d in sorted_dates:
+                                status = "غائب" if attendance_log[d] == "absent" else "حاضر"
+                                report += f"{d}: {status}\n"
+                        
+                        page.set_clipboard(report)
+                        page.snack_bar = ft.SnackBar(ft.Text(f"تم نسخ تقرير الطالب {student['name']}"), bgcolor="blue")
+                        page.snack_bar.open = True
+                        page.update()
+
                     behavior_list = ft.ListView(expand=True, spacing=5)
                     if not history:
                         behavior_list.controls.append(ft.Text("لا يوجد سجل", text_align="center"))
@@ -319,8 +333,9 @@ class SchoolApp:
                         ft.View("/student", [
                             ft.AppBar(
                                 title=ft.Text(student['name']), bgcolor="indigo", color="white",
-                                # هذا الزر الآن سيعمل 100% لأنه يغير المسار
-                                leading=ft.IconButton(ft.icons.ARROW_BACK, on_click=lambda _: page.go("/class"))
+                                leading=ft.IconButton(ft.icons.ARROW_BACK, on_click=lambda _: page.go("/class")),
+                                # زر التصدير الجديد هنا
+                                actions=[ft.IconButton(ft.icons.COPY_ALL, tooltip="نسخ التقرير الشامل", on_click=export_student_report)]
                             ),
                             ft.Container(padding=20, content=ft.Row([
                                 ft.Column([ft.Text("النقاط"), ft.Text(str(student['score']), size=30, weight="bold", color="blue")]),
