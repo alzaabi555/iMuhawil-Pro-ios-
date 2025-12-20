@@ -1,5 +1,5 @@
 import flet as ft
-import traceback  # مكتبة مهمة تظهر تفاصيل الخطأ
+import traceback
 
 class StudentApp:
     def __init__(self):
@@ -11,22 +11,24 @@ class StudentApp:
         ]
 
     def build_ui(self, page: ft.Page):
-        # هذه الدالة تحتوي على كود الواجهة الأصلي الخاص بك
         page.title = "سجل المتابعة الصفي"
         page.rtl = True
         page.theme_mode = ft.ThemeMode.LIGHT
-        page.scroll = "auto"
+        
+        # استخدام auto بدلاً من adaptive لتجنب مشاكل النسخ القديمة
+        page.scroll = "auto" 
+        
         page.window_width = 400
         page.window_height = 700
 
         new_student_name = ft.TextField(hint_text="اسم الطالب الجديد", expand=True)
-
         students_column = ft.Column()
 
         def render_students():
             students_column.controls.clear()
             for i, student in enumerate(self.students):
                 score_text = ft.Text(f"النقاط: {student['score']}", size=16, weight="bold")
+                
                 status_icon = ft.Icon(
                     name=ft.icons.CHECK_CIRCLE if student['present'] else ft.icons.CANCEL,
                     color="green" if student['present'] else "red"
@@ -54,13 +56,15 @@ class StudentApp:
                             ft.Row([
                                 ft.Icon(ft.icons.PERSON),
                                 ft.Text(student['name'], size=18, weight="bold"),
-                                ft.Spacer(),
+                                # التعديل هنا: استبدلنا Spacer بـ Container
+                                ft.Container(expand=True), 
                                 status_icon,
                             ]),
                             ft.Divider(),
                             ft.Row([
                                 score_text,
-                                ft.Spacer(),
+                                # التعديل هنا أيضاً
+                                ft.Container(expand=True),
                                 ft.IconButton(ft.icons.THUMB_UP, icon_color="blue", on_click=add_points),
                                 ft.IconButton(ft.icons.THUMB_DOWN, icon_color="orange", on_click=remove_points),
                                 ft.IconButton(ft.icons.CHANGE_CIRCLE, icon_color="grey", on_click=toggle_attendance),
@@ -94,30 +98,25 @@ class StudentApp:
         page.add(header, input_row, students_column)
 
     def main(self, page: ft.Page):
-        # --- نظام الحماية من الشاشة البيضاء ---
+        # نظام حماية لعرض الأخطاء بدلاً من إغلاق التطبيق
         try:
-            # نحاول تشغيل الواجهة
             self.build_ui(page)
         except Exception as e:
-            # إذا حدث أي خطأ، نعرضه على الشاشة بدلاً من البياض
             page.clean()
             page.add(
                 ft.Column([
                     ft.Icon(ft.icons.ERROR, color="red", size=50),
-                    ft.Text("حدث خطأ أثناء التشغيل:", size=20, weight="bold", color="red"),
+                    ft.Text("حدث خطأ:", size=20, color="red"),
                     ft.Text(f"{e}", size=16),
                     ft.Container(
                         content=ft.Text(traceback.format_exc(), size=12, font_family="monospace"),
                         bgcolor=ft.colors.GREY_200,
-                        padding=10,
-                        border_radius=5
+                        padding=10
                     )
-                ], scroll="adaptive")
+                ], scroll="auto")
             )
             page.update()
 
-# تشغيل التطبيق
 if __name__ == "__main__":
     app = StudentApp()
     ft.app(target=app.main)
-
