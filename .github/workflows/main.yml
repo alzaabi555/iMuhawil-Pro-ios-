@@ -15,7 +15,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install Flet
-        # نستخدم النسخة المستقرة
+        # نستخدم النسخة المستقرة التي نجحت معك سابقاً
         run: pip install flet==0.22.1
 
       - name: Setup Flutter
@@ -37,73 +37,66 @@ jobs:
           echo "charset-normalizer" >> requirements.txt
           echo "idna" >> requirements.txt
 
-      - name: MANUALLY Create Project Structure
-        # هنا الحل الجذري: ننشئ المشروع بأوامرنا نحن وليس بأوامر Flet
+      - name: Build IPA (Standard Way)
+        # نبني التطبيق بالطريقة العادية التي نجحت سابقاً
+        # هذا سينتج ملف StudentApp.ipa (لكنه يحتوي على مشكلة الشاشة البيضاء)
         run: |
-          # 1. إنشاء مجلد للمشروع
-          mkdir app_build
-          cd app_build
-          
-          # 2. إنشاء مشروع Flutter جديد (يحتوي على مجلد ios وكل شيء جاهز)
-          flutter create . --org com.studentapp --platforms ios
-          
-          # 3. مسح كود العداد الافتراضي
-          rm lib/main.dart
-          
-          # 4. العودة للمجلد الرئيسي لنسخ ملفات بايثون
-          cd ..
-          cp main.py app_build/
-          cp requirements.txt app_build/
-          
-          # 5. الدخول لمجلد المشروع واستبدال العداد بكود Flet
-          cd app_build
-          # هذا الأمر يحول مشروع Flutter العادي إلى مشروع Flet
-          flet create . --description "Student App" --org "com.studentapp"
+          flet build ipa . --project StudentApp --flutter-build-args="--no-codesign" --verbose
 
-      - name: Fix Adaptive Scroll (Code Patch)
-        # تصحيح وقائي للكود داخل المجلد الجديد
+      - name: Locate IPA
+        # العثور على الملف الناتج وتجهيزه
         run: |
-          cd app_build
-          sed -i '' 's/page.scroll = "adaptive"/page.scroll = "auto"/g' main.py || true
-
-      - name: DISABLE IMPELLER (Fix White Screen)
-        # الآن المجلد app_build/ios/Runner موجود 100% لأننا أنشأناه بـ flutter create
-        run: |
-          cd app_build/ios/Runner
-          /usr/libexec/PlistBuddy -c "Add :FLTEnableImpeller bool false" Info.plist || echo "Already disabled"
-          echo "Impeller Disabled Successfully."
-
-      - name: Disable Code Signing
-        # تعطيل التوقيع
-        run: |
-          cd app_build/ios
-          sed -i '' 's/CODE_SIGNING_ALLOWED = YES/CODE_SIGNING_ALLOWED = NO/g' Runner.xcodeproj/project.pbxproj
-          sed -i '' 's/CODE_SIGNING_REQUIRED = YES/CODE_SIGNING_REQUIRED = NO/g' Runner.xcodeproj/project.pbxproj
-          sed -i '' 's/CODE_SIGN_IDENTITY = "iPhone Developer";/CODE_SIGN_IDENTITY = "";/g' Runner.xcodeproj/project.pbxproj
-
-      - name: Build IPA Manually
-        # الآن نبني التطبيق
-        run: |
-          cd app_build
-          flutter build ios --release --no-codesign
-
-      - name: Package IPA
-        run: |
-          mkdir Payload
-          # البحث عن التطبيق
-          APP_PATH=$(find app_build/build/ios/iphoneos -name "Runner.app" -type d | head -n 1)
+          # البحث عن ملف IPA
+          IPA_PATH=$(find . -name "*.ipa" | head -n 1)
           
-          if [ -z "$APP_PATH" ]; then
-            echo "Error: Runner.app not found!"
+          if [ -z "$IPA_PATH" ]; then
+             # محاولة يدوية للتجميع في حال فشل Flet في الضغط النهائي
+             APP_PATH=$(find . -name "Runner.app" -type d | head -n 1)
+             if [ -z "$APP_PATH" ]; then
+                echo "Error: No IPA or App found!"
+                exit 1
+             fi
+             mkdir Payload
+             cp -r "$APP_PATH" Payload/
+             zip -r StudentApp.ipa Payload
+             echo "Created IPA manually from Runner.app"
+          else
+             echo "Found IPA at: $IPA_PATH"
+             mv "$IPA_PATH" StudentApp.ipa
+          fi
+
+      - name: FIX WHITE SCREEN (IPA Surgery)
+        # هنا السحر:
+        # 1. نفك ضغط التطبيق
+        # 2. نعدل ملف الإعدادات Info.plist لنعطل Impeller
+        # 3. نعيد ضغطه
+        run: |
+          echo "Starting IPA surgery..."
+          
+          # 1. فك الضغط
+          unzip -o StudentApp.ipa
+          
+          # 2. البحث عن ملف Info.plist داخل المجلد المفكوك
+          PLIST_PATH="Payload/Runner.app/Info.plist"
+          
+          if [ ! -f "$PLIST_PATH" ]; then
+            echo "Error: Info.plist not found inside IPA!"
             exit 1
           fi
           
-          echo "Found App at: $APP_PATH"
-          cp -r "$APP_PATH" Payload/
-          zip -r StudentApp.ipa Payload
+          # 3. حقن كود تعطيل الشاشة البيضاء
+          /usr/libexec/PlistBuddy -c "Add :FLTEnableImpeller bool false" "$PLIST_PATH" || echo "Key might already exist"
+          
+          echo "Patched Info.plist successfully."
+          
+          # 4. حذف ملف IPA القديم
+          rm StudentApp.ipa
+          
+          # 5. إعادة ضغط المجلد الجديد لإنتاج IPA معدل
+          zip -r StudentApp_Patched.ipa Payload
 
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
           name: StudentApp-IPA
-          path: StudentApp.ipa
+          path: StudentApp_Patched.ipa
