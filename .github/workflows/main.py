@@ -3,271 +3,232 @@ import traceback
 
 class SchoolApp:
     def __init__(self):
-        # البيانات الآن عبارة عن قاموس يحتوي الفصول
-        # الهيكل: { "الصف الخامس": [طالب1, طالب2], "الصف السادس": [...] }
-        self.school_data = {} 
-        self.current_class = None # لتتبع الفصل المفتوح حالياً
+        self.school_data = {}
+        self.current_class = None
 
     def main(self, page: ft.Page):
-        # --- إعدادات الصفحة ---
-        page.title = "المساعد المدرسي الذكي"
+        # --- إعدادات الصفحة الهامة جداً للموبايل ---
+        page.title = "المساعد المدرسي"
         page.rtl = True
         page.theme_mode = ft.ThemeMode.LIGHT
-        page.scroll = "auto"
+        
+        # هام جداً: نلغي تمرير الصفحة الرئيسية لمنع التعليق
+        # التمرير سيكون داخل القوائم فقط
+        page.scroll = None 
+        
         page.window_width = 400
         page.window_height = 800
-        page.bgcolor = "#f5f5f5" # خلفية رمادية فاتحة عصرية
+        page.bgcolor = "#f0f2f5"
 
-        # --- دوال البيانات (الحفظ والتحميل) ---
+        # --- منطقة البيانات ---
         def load_data():
-            # تحميل البيانات من ذاكرة الهاتف
-            stored_data = page.client_storage.get("school_db")
-            if stored_data:
-                self.school_data = stored_data
-            else:
+            try:
+                stored = page.client_storage.get("school_db")
+                if stored and isinstance(stored, dict):
+                    self.school_data = stored
+                else:
+                    self.school_data = {}
+            except:
                 self.school_data = {}
 
         def save_data():
-            # حفظ البيانات فوراً
             page.client_storage.set("school_db", self.school_data)
 
-        # تحميل البيانات عند البدء
+        # زر طوارئ لحذف البيانات إذا علق التطبيق
+        def clear_all_data(e):
+            page.client_storage.clear()
+            self.school_data = {}
+            show_classes_view()
+            page.snack_bar = ft.SnackBar(ft.Text("تم تصفير جميع البيانات بنجاح"))
+            page.snack_bar.open = True
+            page.update()
+
         load_data()
 
-        # --- عناصر الواجهة المتغيرة ---
-        main_column = ft.Column(scroll="auto", expand=True)
-        
-        # حقل إضافة فصل جديد
-        new_class_input = ft.TextField(
-            hint_text="اسم الفصل (مثلاً: خامس/2)", 
-            bgcolor="white", 
-            border_radius=10,
-            expand=True
-        )
+        # --- القائمة الرئيسية (ListView بدلاً من Column لمنع التعليق) ---
+        # expand=1 يعني خذ كل المساحة المتبقية
+        main_list = ft.ListView(expand=1, spacing=10, padding=20)
 
-        # حقل إضافة طالب جديد
-        new_student_input = ft.TextField(
-            hint_text="اسم الطالب الجديد", 
-            bgcolor="white", 
-            border_radius=10,
-            expand=True
-        )
+        # حقول الإدخال
+        txt_class_name = ft.TextField(hint_text="اسم الفصل (مثلاً: 5/2)", bgcolor="white", border_radius=10, expand=True)
+        txt_student_name = ft.TextField(hint_text="اسم الطالب", bgcolor="white", border_radius=10, expand=True)
 
-        # --- دوال التنطق والرسم ---
+        # --- الشاشات ---
 
         def show_classes_view():
-            """عرض قائمة الفصول الدراسية"""
+            """شاشة الفصول"""
             self.current_class = None
+            
+            # تنظيف القائمة
+            main_list.controls.clear()
+            
+            # إعداد الشريط العلوي
             page.appbar.title.value = "الفصول الدراسية"
-            page.appbar.leading = ft.Icon(ft.icons.SCHOOL, color="white")
-            page.appbar.actions = [] # إخفاء زر الحذف العام
-            
-            main_column.controls.clear()
+            page.appbar.leading = ft.Icon(ft.icons.HOME, color="white")
+            # زر تصفير البيانات للطوارئ
+            page.appbar.actions = [
+                ft.IconButton(ft.icons.DELETE_SWEEP, icon_color="white", tooltip="تصفير الكل", on_click=clear_all_data)
+            ]
 
-            # منطقة إضافة فصل
-            add_row = ft.Row([
-                new_class_input,
-                ft.FloatingActionButton(
-                    icon=ft.icons.ADD, 
-                    bgcolor=ft.colors.INDIGO, 
-                    on_click=add_class
-                )
-            ], alignment=ft.MainAxisAlignment.CENTER)
-            
-            main_column.controls.append(ft.Container(content=add_row, padding=10))
+            # قسم إضافة فصل
+            add_section = ft.Container(
+                bgcolor="white",
+                padding=10,
+                border_radius=10,
+                content=ft.Row([
+                    txt_class_name,
+                    ft.IconButton(ft.icons.ADD_CIRCLE, icon_color="indigo", icon_size=40, on_click=add_class_action)
+                ])
+            )
+            main_list.controls.append(add_section)
 
+            # عرض الفصول
             if not self.school_data:
-                main_column.controls.append(
-                    ft.Container(
-                        content=ft.Text("لا توجد فصول، أضف فصلاً للبدء", color="grey", size=16),
-                        alignment=ft.alignment.center,
-                        padding=50
-                    )
-                )
+                main_list.controls.append(ft.Text("لا توجد فصول، أضف فصلاً جديداً", color="grey", text_align="center"))
 
-            # رسم بطاقات الفصول
-            for class_name in self.school_data:
+            for class_name in list(self.school_data.keys()):
                 student_count = len(self.school_data[class_name])
                 
-                # دالة لحذف الفصل
-                def delete_class_action(e, name=class_name):
+                # استخدام Closure لحفظ اسم الفصل
+                def open_curr_class(e, name=class_name):
+                    show_students_view(name)
+
+                def delete_curr_class(e, name=class_name):
                     del self.school_data[name]
                     save_data()
                     show_classes_view()
                     page.update()
 
-                # دالة لفتح الفصل
-                def open_class_action(e, name=class_name):
-                    self.current_class = name
-                    show_students_view(name)
-                    page.update()
-
-                class_card = ft.Card(
-                    elevation=2,
-                    surface_tint_color="white",
+                card = ft.Card(
+                    elevation=3,
                     content=ft.Container(
                         padding=15,
-                        on_click=open_class_action, # جعل البطاقة قابلة للضغط
+                        on_click=open_curr_class, # الضغط هنا يفتح الفصل
                         content=ft.Row([
-                            ft.Icon(ft.icons.CLASS_, color=ft.colors.INDIGO, size=30),
-                            ft.Container(width=10),
+                            ft.Icon(ft.icons.MEETING_ROOM, color="indigo"),
                             ft.Column([
                                 ft.Text(class_name, size=18, weight="bold"),
-                                ft.Text(f"عدد الطلاب: {student_count}", size=12, color="grey"),
+                                ft.Text(f"{student_count} طالب", size=12, color="grey")
                             ]),
                             ft.Container(expand=True),
-                            ft.IconButton(
-                                icon=ft.icons.DELETE_OUTLINE, 
-                                icon_color="red", 
-                                tooltip="حذف الفصل",
-                                on_click=delete_class_action
-                            )
+                            ft.IconButton(ft.icons.DELETE, icon_color="red", on_click=delete_curr_class)
                         ])
                     )
                 )
-                main_column.controls.append(class_card)
+                main_list.controls.append(card)
             
             page.update()
 
         def show_students_view(class_name):
-            """عرض قائمة الطلاب داخل فصل معين"""
-            page.appbar.title.value = f"طلاب {class_name}"
-            # زر الرجوع
-            page.appbar.leading = ft.IconButton(
-                icon=ft.icons.ARROW_BACK, 
-                icon_color="white", 
-                on_click=lambda e: show_classes_view()
+            """شاشة الطلاب"""
+            self.current_class = class_name
+            main_list.controls.clear()
+            
+            page.appbar.title.value = f"طلاب: {class_name}"
+            page.appbar.leading = ft.IconButton(ft.icons.ARROW_BACK, icon_color="white", on_click=lambda e: show_classes_view())
+            page.appbar.actions = []
+
+            # قسم إضافة طالب
+            add_section = ft.Container(
+                bgcolor="white",
+                padding=10,
+                border_radius=10,
+                content=ft.Row([
+                    txt_student_name,
+                    ft.IconButton(ft.icons.PERSON_ADD, icon_color="green", icon_size=40, on_click=add_student_action)
+                ])
             )
+            main_list.controls.append(add_section)
+
+            students = self.school_data[class_name]
             
-            main_column.controls.clear()
+            if not students:
+                main_list.controls.append(ft.Container(content=ft.Text("الفصل فارغ", color="grey"), alignment=ft.alignment.center, padding=20))
 
-            # منطقة إضافة طالب
-            add_row = ft.Row([
-                new_student_input,
-                ft.FloatingActionButton(
-                    icon=ft.icons.PERSON_ADD, 
-                    bgcolor=ft.colors.GREEN, 
-                    on_click=add_student
-                )
-            ], alignment=ft.MainAxisAlignment.CENTER)
-            
-            main_column.controls.append(ft.Container(content=add_row, padding=10))
-
-            students_list = self.school_data[class_name]
-
-            if not students_list:
-                main_column.controls.append(
-                    ft.Container(
-                        content=ft.Text("لا يوجد طلاب في هذا الفصل", color="grey"),
-                        alignment=ft.alignment.center,
-                        padding=30
-                    )
-                )
-
-            for i, student in enumerate(students_list):
+            for i, student in enumerate(students):
                 
-                # دوال التعامل مع الطالب
-                def update_score(e, idx=i, delta=0):
-                    students_list[idx]['score'] += delta
+                # دوال التحكم
+                def change_score(e, idx=i, val=1):
+                    students[idx]['score'] += val
                     save_data()
-                    show_students_view(class_name) # إعادة رسم لتحديث الرقم
-                    page.update()
-
-                def toggle_present(e, idx=i):
-                    students_list[idx]['present'] = not students_list[idx]['present']
-                    save_data()
-                    show_students_view(class_name)
-                    page.update()
+                    # تحديث النص فقط بدلاً من إعادة رسم القائمة كاملة (أسرع)
+                    e.control.parent.controls[0].content.value = f"النقاط: {students[idx]['score']}"
+                    e.control.parent.controls[0].content.update()
 
                 def delete_student(e, idx=i):
-                    students_list.pop(idx)
+                    students.pop(idx)
                     save_data()
                     show_students_view(class_name)
-                    page.update()
 
-                # الألوان بناء على الحالة
-                status_color = ft.colors.GREEN if student['present'] else ft.colors.RED_200
-                bg_color = "white" if student['present'] else ft.colors.GREY_100
+                def toggle_absent(e, idx=i):
+                    students[idx]['present'] = not students[idx]['present']
+                    save_data()
+                    show_students_view(class_name)
 
-                student_card = ft.Card(
-                    color=bg_color,
-                    elevation=1,
+                is_present = student['present']
+                bg_card = "white" if is_present else "#ffebee" # أحمر فاتح للغياب
+
+                card = ft.Card(
+                    color=bg_card,
                     content=ft.Container(
                         padding=10,
                         content=ft.Column([
                             ft.Row([
-                                ft.Icon(ft.icons.PERSON, color=ft.colors.BLUE_GREY),
-                                ft.Text(student['name'], size=16, weight="bold", color="black"),
+                                ft.Icon(ft.icons.PERSON),
+                                ft.Text(student['name'], size=16, weight="bold"),
                                 ft.Container(expand=True),
-                                ft.IconButton(ft.icons.DELETE_FOREVER, icon_color="red", size=20, on_click=delete_student)
+                                ft.IconButton(ft.icons.CLOSE, icon_color="red", icon_size=18, on_click=delete_student)
                             ]),
-                            ft.Divider(height=10, color="transparent"),
+                            ft.Divider(height=5, color="transparent"),
                             ft.Row([
+                                # مربع النقاط
                                 ft.Container(
-                                    content=ft.Text(f"النقاط: {student['score']}", weight="bold", color="white"),
-                                    bgcolor=ft.colors.BLUE,
-                                    padding=5,
-                                    border_radius=5
+                                    content=ft.Text(f"النقاط: {student['score']}", color="white", weight="bold"),
+                                    bgcolor="blue", padding=5, border_radius=5, width=80, alignment=ft.alignment.center
                                 ),
-                                ft.Container(expand=True),
-                                ft.IconButton(ft.icons.REMOVE_CIRCLE_OUTLINE, icon_color="orange", on_click=lambda e: update_score(e, delta=-1)),
-                                ft.IconButton(ft.icons.ADD_CIRCLE_OUTLINE, icon_color="green", on_click=lambda e: update_score(e, delta=1)),
                                 ft.Container(width=10),
-                                ft.IconButton(
-                                    icon=ft.icons.CHECK_CIRCLE if student['present'] else ft.icons.CANCEL,
-                                    icon_color=status_color,
-                                    tooltip="تحضير/غياب",
-                                    on_click=toggle_present
-                                )
+                                ft.IconButton(ft.icons.REMOVE_CIRCLE, icon_color="orange", on_click=lambda e, i=i: change_score(e, i, -1)),
+                                ft.IconButton(ft.icons.ADD_CIRCLE, icon_color="green", on_click=lambda e, i=i: change_score(e, i, 1)),
+                                ft.Container(expand=True),
+                                ft.Switch(value=is_present, active_color="green", on_change=toggle_absent)
                             ])
                         ])
                     )
                 )
-                main_column.controls.append(student_card)
+                main_list.controls.append(card)
 
             page.update()
 
-        # --- دوال الإضافة ---
-        def add_class(e):
-            name = new_class_input.value
-            if name:
-                if name not in self.school_data:
-                    self.school_data[name] = [] # فصل جديد فارغ
+        # --- الأزرار ---
+        def add_class_action(e):
+            if txt_class_name.value:
+                if txt_class_name.value not in self.school_data:
+                    self.school_data[txt_class_name.value] = []
                     save_data()
-                    new_class_input.value = ""
+                    txt_class_name.value = ""
                     show_classes_view()
                 else:
-                    # تنبيه إذا الاسم مكرر (يمكن إضافة SnackBar هنا)
-                    new_class_input.error_text = "الفصل موجود بالفعل"
+                    txt_class_name.error_text = "موجود مسبقاً"
                     page.update()
 
-        def add_student(e):
-            name = new_student_input.value
-            if name and self.current_class:
-                # هيكل بيانات الطالب
-                new_student = {"name": name, "score": 0, "present": True}
-                self.school_data[self.current_class].append(new_student)
+        def add_student_action(e):
+            if txt_student_name.value and self.current_class:
+                new_stu = {"name": txt_student_name.value, "score": 0, "present": True}
+                self.school_data[self.current_class].append(new_stu)
                 save_data()
-                new_student_input.value = ""
+                txt_student_name.value = ""
+                # إعادة التركيز على حقل الإدخال
+                txt_student_name.focus()
                 show_students_view(self.current_class)
 
-        # --- بناء الصفحة الرئيسية ---
-        page.appbar = ft.AppBar(
-            title=ft.Text("المدرسة الذكية"),
-            center_title=True,
-            bgcolor=ft.colors.INDIGO,
-            color="white"
-        )
+        # --- تشغيل التطبيق ---
+        page.appbar = ft.AppBar(title=ft.Text(""), bgcolor="indigo", color="white")
         
-        page.add(main_column)
+        # إضافة القائمة للصفحة
+        page.add(main_list)
         
-        # التشغيل الأولي
         show_classes_view()
 
 if __name__ == "__main__":
-    try:
-        app = SchoolApp()
-        ft.app(target=app.main)
-    except Exception as e:
-        # طباعة الخطأ في حال حدوثه لا سمح الله
-        print(traceback.format_exc())
+    app = SchoolApp()
+    ft.app(target=app.main)
