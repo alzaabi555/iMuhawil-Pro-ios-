@@ -27,7 +27,7 @@ jobs:
         run: sudo gem install cocoapods
 
       - name: Create Requirements File
-        # إضافة openpyxl فقط (بدون pandas) لضمان العمل على الايفون
+        # نستخدم openpyxl فقط لأنها تعمل بنجاح على الايفون
         run: |
           echo "flet==0.22.1" > requirements.txt
           echo "certifi" >> requirements.txt
@@ -38,8 +38,11 @@ jobs:
           echo "idna" >> requirements.txt
           echo "openpyxl" >> requirements.txt
 
-      - name: Prepare Project (Manual Build)
-        # نعود للطريقة اليدوية لأنها الأضمن في تجاوز أخطاء الشاشة البيضاء
+      - name: Prepare Project (The Golden Method)
+        # هذه هي الطريقة التي نجحت سابقاً:
+        # 1. ننشئ مشروع فلاتر كامل (يحتوي على pubspec.yaml ومجلد ios)
+        # 2. نحذف ملف الكود الرئيسي فقط (lib/main.dart) لنزيل العداد
+        # 3. نضع كود flet مكانه
         run: |
           mkdir app_build
           cp main.py app_build/
@@ -47,19 +50,20 @@ jobs:
           
           cd app_build
           
-          # إنشاء مجلدات الايفون
+          # إنشاء ملفات النظام (بما في ذلك pubspec.yaml)
           flutter create . --platforms ios --org com.schoolapp
           
-          # حذف الكود الافتراضي واستبداله بكودنا
+          # حذف كود العداد فقط (لا نحذف pubspec.yaml)
           rm lib/main.dart
-          rm pubspec.yaml
+          
+          # وضع كود Flet
           flet create .
           
-          # تصحيح التمرير تلقائياً
+          # تصحيح التمرير
           sed -i '' 's/page.scroll = "adaptive"/page.scroll = "auto"/g' main.py || true
 
-      - name: DISABLE IMPELLER (The Source Way)
-        # هذه الطريقة مضمونة 100% لأن الملفات موجودة أمامنا
+      - name: DISABLE IMPELLER (Fix White Screen)
+        # تعطيل المحرك الجديد من المصدر
         run: |
           cd app_build/ios/Runner
           /usr/libexec/PlistBuddy -c "Add :FLTEnableImpeller bool false" Info.plist
