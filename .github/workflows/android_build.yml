@@ -1,4 +1,4 @@
-name: Build Android APK (Final Fix)
+name: Build Android APK (Manual Main Fix)
 
 on:
   workflow_dispatch:
@@ -41,7 +41,7 @@ jobs:
           echo "idna" >> requirements.txt
           echo "openpyxl" >> requirements.txt
 
-      - name: Prepare Project (Manual Build)
+      - name: Prepare Project Structure
         run: |
           mkdir app_build
           cp main.py app_build/
@@ -52,39 +52,48 @@ jobs:
           
           cd app_build
           
-          # 1. إنشاء المشروع (نحدد الاسم والمنظمة هنا فقط)
+          # 1. إنشاء هيكل مشروع فلاتر
           flutter create . --platforms android --org com.schoolapp --project-name student_app
           
           # 2. حذف الكود الافتراضي
           rm lib/main.dart
-          
-          # 3. دمج كود بايثون (تم التصحيح: حذفنا الخيارات المكررة التي سببت الخطأ)
+
+          # 3. تجهيز أصول Flet
           flet create . --description "المتابع المدرسي"
 
-      - name: FIX ANDROID SDK VERSION (Critical Fix)
-        # هذا التعديل ضروري لأن المكتبات الجديدة تطلب SDK 34
+      - name: CREATE MISSING MAIN.DART (The Fix)
+        # هنا نقوم بإنشاء الملف المفقود يدوياً
+        run: |
+          cd app_build/lib
+          cat <<EOF > main.dart
+          import 'package:flutter/material.dart';
+          import 'package:flet/flet.dart';
+
+          void main() async {
+            await setupFlet();
+            runApp(const FletApp());
+          }
+          EOF
+          echo "main.dart created successfully ✅"
+
+      - name: FIX ANDROID SDK VERSION
+        # رفع إصدار SDK إلى 34 لإرضاء المكتبات الحديثة
         run: |
           cd app_build/android/app
-          
-          # تعديل ملف build.gradle لرفع الإصدار إلى 34
           sed -i 's/compileSdkVersion .*/compileSdkVersion 34/g' build.gradle
           sed -i 's/targetSdkVersion .*/targetSdkVersion 34/g' build.gradle
-          
           echo "SDK Version updated to 34 ✅"
 
       - name: FIX PERMISSIONS & NAME
         run: |
           cd app_build/android/app/src/main
-          
           MANIFEST="AndroidManifest.xml"
           
-          # إضافة أذونات قراءة الملفات
+          # إضافة الأذونات
           sed -i 's|<application|<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>\n    <application|g' $MANIFEST
           
-          # تغيير اسم التطبيق للعربية
+          # تغيير الاسم للعربية
           sed -i 's/android:label="student_app"/android:label="المتابع المدرسي"/g' $MANIFEST
-          
-          echo "Permissions and Name updated ✅"
 
       - name: Build APK
         run: |
