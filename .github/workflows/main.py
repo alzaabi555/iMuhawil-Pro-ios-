@@ -38,7 +38,7 @@ class SchoolApp:
                 stored = page.client_storage.get("school_db_v2")
                 if stored and isinstance(stored, dict):
                     self.school_data = stored
-                    # الإصلاح التلقائي
+                    # الإصلاح التلقائي للبيانات القديمة
                     for class_name, students in self.school_data.items():
                         for student in students:
                             if "positive_notes" not in student: student["positive_notes"] = []
@@ -253,9 +253,10 @@ class SchoolApp:
         def show_classes_view():
             self.current_class = None
             main_list.controls.clear()
-            # هنا كان الخطأ: لا يمكن تعديل العنوان إذا لم يكن موجوداً
-            # الآن أصبح آمناً لأننا أنشأنا عنواناً فارغاً في البداية
+            
+            # تم إصلاح الخطأ هنا:
             page.appbar.title.value = "الرئيسية"
+            
             page.appbar.leading = ft.IconButton(ft.icons.INFO_OUTLINE, on_click=show_info_dialog)
             page.appbar.actions = [
                 ft.IconButton(ft.icons.BAR_CHART, on_click=lambda e: show_stats_view()),
@@ -314,8 +315,8 @@ class SchoolApp:
             show_students_view(class_name)
 
         load_data()
-        # --- التصحيح هنا ---
-        # أضفنا title=ft.Text("") ليتمكن البرنامج من تغييره لاحقاً
+        # --- التصحيح الحاسم للشريط الأزرق ---
+        # أضفنا title=ft.Text("") لكي لا يتوقف البرنامج
         page.appbar = ft.AppBar(title=ft.Text(""), bgcolor="indigo", color="white")
         page.add(main_list)
         show_classes_view()
