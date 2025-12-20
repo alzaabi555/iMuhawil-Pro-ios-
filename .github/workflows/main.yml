@@ -15,7 +15,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install Flet
-        # نستخدم نسخة 0.22.1 لاستقرارها
+        # نستخدم النسخة المستقرة
         run: pip install flet==0.22.1
 
       - name: Setup Flutter
@@ -37,25 +37,40 @@ jobs:
           echo "charset-normalizer" >> requirements.txt
           echo "idna" >> requirements.txt
 
-      - name: Generate Project Structure (Ignore Errors)
-        # هذه الخطوة تولد مجلد app_build وفيه ملف main.dart الصحيح
-        # وضعنا continue-on-error لأننا نتوقع أن يفشل البناء هنا بسبب التوقيع
-        # لكننا نحتاج المجلد فقط
-        continue-on-error: true
+      - name: MANUALLY Create Project Structure
+        # هنا الحل الجذري: ننشئ المشروع بأوامرنا نحن وليس بأوامر Flet
         run: |
-          flet build ipa --project app_build --verbose
+          # 1. إنشاء مجلد للمشروع
+          mkdir app_build
+          cd app_build
+          
+          # 2. إنشاء مشروع Flutter جديد (يحتوي على مجلد ios وكل شيء جاهز)
+          flutter create . --org com.studentapp --platforms ios
+          
+          # 3. مسح كود العداد الافتراضي
+          rm lib/main.dart
+          
+          # 4. العودة للمجلد الرئيسي لنسخ ملفات بايثون
+          cd ..
+          cp main.py app_build/
+          cp requirements.txt app_build/
+          
+          # 5. الدخول لمجلد المشروع واستبدال العداد بكود Flet
+          cd app_build
+          # هذا الأمر يحول مشروع Flutter العادي إلى مشروع Flet
+          flet create . --description "Student App" --org "com.studentapp"
 
       - name: Fix Adaptive Scroll (Code Patch)
-        # تصحيح وقائي للكود
+        # تصحيح وقائي للكود داخل المجلد الجديد
         run: |
+          cd app_build
           sed -i '' 's/page.scroll = "adaptive"/page.scroll = "auto"/g' main.py || true
 
       - name: DISABLE IMPELLER (Fix White Screen)
-        # الآن المجلد app_build موجود بالتأكيد وفيه الإعدادات
-        # نقوم بتعطيل المحرك الجديد
+        # الآن المجلد app_build/ios/Runner موجود 100% لأننا أنشأناه بـ flutter create
         run: |
           cd app_build/ios/Runner
-          /usr/libexec/PlistBuddy -c "Add :FLTEnableImpeller bool false" Info.plist
+          /usr/libexec/PlistBuddy -c "Add :FLTEnableImpeller bool false" Info.plist || echo "Already disabled"
           echo "Impeller Disabled Successfully."
 
       - name: Disable Code Signing
@@ -67,7 +82,7 @@ jobs:
           sed -i '' 's/CODE_SIGN_IDENTITY = "iPhone Developer";/CODE_SIGN_IDENTITY = "";/g' Runner.xcodeproj/project.pbxproj
 
       - name: Build IPA Manually
-        # الآن نبني التطبيق يدوياً، وهذه المرة ملف main.dart موجود وصحيح
+        # الآن نبني التطبيق
         run: |
           cd app_build
           flutter build ios --release --no-codesign
