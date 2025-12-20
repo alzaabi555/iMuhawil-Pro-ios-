@@ -1,4 +1,4 @@
-name: Build Android APK (Final Downgrade Fix)
+name: Build Android APK (Compatible Version)
 
 on:
   workflow_dispatch:
@@ -14,8 +14,9 @@ jobs:
         with:
           python-version: '3.11'
 
+      # التغيير الجوهري 1: نستخدم نسخة Flet متوافقة مع Flutter القديم
       - name: Install Flet
-        run: pip install flet==0.22.1
+        run: pip install flet==0.21.2
 
       - name: Setup Java
         uses: actions/setup-java@v3
@@ -23,8 +24,7 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # الحيلة هنا: نستخدم إصدار 3.16.9 بدلاً من 3.19.0
-      # هذا الإصدار مستقر جداً ولا يستخدم المحرك الجديد الذي يسبب الشاشة البيضاء
+      # التغيير الجوهري 2: نستخدم Flutter 3.16.9 (الخالي من مشاكل الشاشة البيضاء)
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
@@ -32,8 +32,9 @@ jobs:
           channel: 'stable'
 
       - name: Create Requirements File
+        # نثبت النسخة المتوافقة هنا أيضاً
         run: |
-          echo "flet==0.22.1" > requirements.txt
+          echo "flet==0.21.2" > requirements.txt
           echo "certifi" >> requirements.txt
           echo "typing_extensions" >> requirements.txt
           echo "urllib3" >> requirements.txt
@@ -52,10 +53,8 @@ jobs:
             echo "Warning: icon.png not found! Using default."
           fi
 
-      - name: Build APK (Auto Mode)
-        # نستخدم البناء التلقائي (المضمون لإنشاء كل الملفات)
-        # أزلنا الأمر الذي كان يسبب الخطأ (--flutter-build-args)
-        # اسم التطبيق بالعربي موجود هنا
+      - name: Build APK
+        # الآن سيعمل البناء لأن النسختين متوافقتين
         run: |
           flet build apk . --project StudentApp --product "المتابع المدرسي" --verbose
 
