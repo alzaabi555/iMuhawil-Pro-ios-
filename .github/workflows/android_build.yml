@@ -52,30 +52,28 @@ jobs:
           
           cd app_build
           
-          # 1. إنشاء مشروع فلاتر عادي
+          # 1. إنشاء مشروع فلاتر (هنا نحدد الاسم والمنظمة)
           flutter create . --platforms android --org com.schoolapp --project-name student_app
           
           # 2. حذف الكود الافتراضي
           rm lib/main.dart
           
-          # 3. دمج كود بايثون
-          flet create . --description "المتابع المدرسي" --org com.schoolapp --project-name student_app
+          # 3. دمج كود بايثون (تم التصحيح: حذفنا الخيارات الزائدة)
+          flet create . --description "المتابع المدرسي"
 
       - name: FIX WHITE SCREEN & PERMISSIONS
-        # هذه الخطوة الأهم: نعدل ملف AndroidManifest.xml يدوياً
         run: |
           cd app_build
           
           MANIFEST_PATH="android/app/src/main/AndroidManifest.xml"
           
-          # 1. إضافة إذن قراءة الملفات (لحل مشاكل الاكسل)
+          # 1. إضافة إذن قراءة الملفات
           sed -i 's|<application|<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>\n    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>\n    <application|g' $MANIFEST_PATH
           
-          # 2. تعطيل محرك Impeller (لحل الشاشة البيضاء)
-          # نقوم بحقن كود التعطيل داخل الوسم <application>
+          # 2. تعطيل محرك Impeller (حل الشاشة البيضاء)
           sed -i 's|<application|<application\n        <meta-data android:name="io.flutter.embedding.android.EnableImpeller" android:value="false" />|g' $MANIFEST_PATH
           
-          # 3. تغيير اسم التطبيق للعربية في ملف الإعدادات
+          # 3. تغيير اسم التطبيق للعربية
           sed -i 's/android:label="student_app"/android:label="المتابع المدرسي"/g' $MANIFEST_PATH
           
           echo "Done: Permissions added, Impeller disabled, Arabic name set."
@@ -83,7 +81,6 @@ jobs:
       - name: Build APK
         run: |
           cd app_build
-          # بناء نسخة جاهزة للإطلاق
           flutter build apk --release
 
       - name: Upload APK
