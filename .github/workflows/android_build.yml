@@ -1,4 +1,4 @@
-name: Build Android APK (Manual Nuclear Option)
+name: Build Android APK (Template Injection Master)
 
 on:
   workflow_dispatch:
@@ -14,7 +14,7 @@ jobs:
         with:
           python-version: '3.11'
 
-      # نثبت Flet فقط لتجهيز الأصول
+      # نثبت أحدث نسخة من Flet
       - name: Install Flet
         run: pip install flet
 
@@ -24,120 +24,124 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # نستخدم Flutter 3.22 (القوي)
+      # نستخدم Flutter 3.22 (الأحدث والأقوى)
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.22.0'
           channel: 'stable'
 
-      - name: Prepare Project Workspace
+      - name: Create Requirements File
         run: |
-          # تنظيف أي محاولات سابقة
-          rm -rf app_build
-          mkdir app_build
-          
-          # نسخ ملفاتك
-          cp main.py app_build/
-          
-          # إنشاء ملف المتطلبات
-          echo "flet" > app_build/requirements.txt
-          echo "openpyxl" >> app_build/requirements.txt
-          
-          # نسخ الأيقونة
+          echo "flet" > requirements.txt
+          echo "certifi" >> requirements.txt
+          echo "typing_extensions" >> requirements.txt
+          echo "urllib3" >> requirements.txt
+          echo "requests" >> requirements.txt
+          echo "charset-normalizer" >> requirements.txt
+          echo "idna" >> requirements.txt
+          echo "openpyxl" >> requirements.txt
+
+      - name: Prepare Icon
+        run: |
           if [ -f "icon.png" ]; then
-            cp icon.png app_build/
+            echo "Icon found! ✅"
+            mkdir -p assets
+            cp icon.png assets/icon.png
+          else
+            echo "Warning: icon.png not found! Using default."
           fi
 
-      - name: MANUALLY CREATE FLUTTER PROJECT
-        run: |
-          cd app_build
-          
-          # 1. إنشاء مشروع فارغ
-          flutter create . --platforms android --org com.schoolapp --project-name student_app
-          
-          # 2. إضافة مكتبة Flet إلى Flutter (هذا ما كان ينقصنا!)
-          flutter pub add flet
-          
-          # 3. حذف ملف main.dart الافتراضي
-          rm lib/main.dart
-
-      - name: PREPARE FLET ASSETS
-        run: |
-          cd app_build
-          # هذا الأمر يضغط كود البايثون ويضعه في مجلد الأصول
-          flet create . --description "المتابع المدرسي" --no-web --no-windows --no-linux --no-macos
-
-      - name: WRITE MAIN.DART MANUALLY
-        # نكتب كود التشغيل يدوياً لنضمن عمله
-        run: |
-          cd app_build/lib
-          cat <<EOF > main.dart
-          import 'package:flutter/material.dart';
-          import 'package:flet/flet.dart';
-
-          void main() async {
-            await setupFlet();
-            runApp(const FletApp());
-          }
-          EOF
-
-      - name: INJECT MANIFEST FIXES (The Secret Sauce)
+      - name: INJECT FIXES INTO FLUTTER TEMPLATES (The Master Key)
         shell: python
         run: |
           import os
-          
-          manifest_path = "app_build/android/app/src/main/AndroidManifest.xml"
-          print(f"Patching: {manifest_path}")
+          import shutil
 
-          with open(manifest_path, "r") as f:
+          # 1. تحديد موقع قوالب Flutter في السيرفر
+          flutter_bin = shutil.which("flutter")
+          flutter_home = os.path.dirname(os.path.dirname(flutter_bin))
+          print(f"Flutter Home: {flutter_home}")
+
+          # البحث عن ملف قالب Manifest
+          manifest_template = None
+          for root, dirs, files in os.walk(flutter_home):
+              for file in files:
+                  if file == "AndroidManifest.xml.tmpl" and "android.tmpl" in root:
+                      manifest_template = os.path.join(root, file)
+                      break
+              if manifest_template: break
+          
+          if not manifest_template:
+              print("Error: Manifest template not found!")
+              exit(1)
+
+          print(f"Patching Manifest Template: {manifest_template}")
+
+          with open(manifest_template, "r") as f:
               content = f.read()
 
-          # 1. أهم تعديل: السماح بالاتصال المحلي (Cleartext Traffic)
-          # بدونه لن تعمل Flet أبداً على أندرويد الحديث
-          if 'android:usesCleartextTraffic="true"' not in content:
-              content = content.replace('<application', '<application android:usesCleartextTraffic="true"')
-              print("Added: usesCleartextTraffic ✅")
-
-          # 2. تعطيل Impeller (الشاشة البيضاء)
-          impeller_fix = '        <meta-data android:name="io.flutter.embedding.android.EnableImpeller" android:value="false" />'
-          if "EnableImpeller" not in content:
-              content = content.replace('</application>', f'{impeller_fix}\n    </application>')
-              print("Added: Disable Impeller ✅")
-
-          # 3. الأذونات
-          permissions = '''
+          # --- التعديل 1: إضافة الأذونات (الحل الجذري للشاشة البيضاء) ---
+          # نضيف إذن الإنترنت + Cleartext Traffic
+          permissions_block = '''
           <uses-permission android:name="android.permission.INTERNET"/>
           <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
           <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
           '''
+          
           if "android.permission.INTERNET" not in content:
-              content = content.replace('<application', f'{permissions}\n    <application')
-              print("Added: Permissions ✅")
+              content = content.replace("<application", f"{permissions_block}\n    <application")
+              print("Permissions Injected ✅")
 
-          # 4. الاسم العربي
-          content = content.replace('android:label="student_app"', 'android:label="الرفيق المدرسي"')
+          if 'android:usesCleartextTraffic="true"' not in content:
+              content = content.replace("<application", '<application android:usesCleartextTraffic="true"')
+              print("Cleartext Traffic Enabled ✅")
 
-          with open(manifest_path, "w") as f:
+          # --- التعديل 2: تعطيل Impeller (ضمان إضافي) ---
+          impeller_block = '        <meta-data android:name="io.flutter.embedding.android.EnableImpeller" android:value="false" />'
+          if "EnableImpeller" not in content:
+              content = content.replace("</application>", f"{impeller_block}\n    </application>")
+              print("Impeller Disabled ✅")
+
+          with open(manifest_template, "w") as f:
               f.write(content)
 
-      - name: FIX GRADLE SDK VERSION
-        run: |
-          cd app_build/android/app
-          # نحدث SDK إلى 34
-          sed -i 's/compileSdk = .*/compileSdk = 34/g' build.gradle
-          sed -i 's/targetSdk = .*/targetSdk = 34/g' build.gradle
-          # احتياطاً للنسخ القديمة
-          sed -i 's/compileSdkVersion .*/compileSdkVersion 34/g' build.gradle
-          sed -i 's/targetSdkVersion .*/targetSdkVersion 34/g' build.gradle
+          # --- التعديل 3: تحديث SDK في قالب Gradle ---
+          gradle_template = os.path.join(os.path.dirname(os.path.dirname(manifest_template)), "build.gradle")
+          if not os.path.exists(gradle_template):
+              # محاولة مسار بديل للقوالب الحديثة
+              gradle_template = os.path.join(os.path.dirname(os.path.dirname(manifest_template)), "build.gradle.kts")
 
-      - name: BUILD APK
+          if os.path.exists(gradle_template):
+              print(f"Patching Gradle Template: {gradle_template}")
+              with open(gradle_template, "r") as f:
+                  g_content = f.read()
+              
+              import re
+              # إجبار القالب على استخدام SDK 34 دائماً
+              g_content = re.sub(r'compileSdkVersion .*', 'compileSdkVersion 34', g_content)
+              g_content = re.sub(r'targetSdkVersion .*', 'targetSdkVersion 34', g_content)
+              g_content = re.sub(r'compileSdk = .*', 'compileSdk = 34', g_content)
+              g_content = re.sub(r'targetSdk = .*', 'targetSdk = 34', g_content)
+              
+              with open(gradle_template, "w") as f:
+                  f.write(g_content)
+              print("SDK Template Updated to 34 ✅")
+
+      - name: Build APK (Auto Mode)
+        # الآن نستخدم البناء التلقائي، وهو سيستخدم القوالب التي قمنا "بتهكيرها" للتو
         run: |
-          cd app_build
-          flutter build apk --release --target-platform android-arm,android-arm64
+          flet build apk . --project StudentApp --product "المتابع المدرسي" --verbose
+
+      - name: Find and Rename APK
+        run: |
+          APK_PATH=$(find . -name "*.apk" | grep "release" | head -n 1)
+          if [ -z "$APK_PATH" ]; then APK_PATH=$(find . -name "*.apk" | head -n 1); fi
+          if [ -z "$APK_PATH" ]; then echo "Error: APK not found!"; exit 1; fi
+          mv "$APK_PATH" StudentApp.apk
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: StudentApp-Android
-          path: app_build/build/app/outputs/flutter-apk/app-release.apk
+          path: StudentApp.apk
