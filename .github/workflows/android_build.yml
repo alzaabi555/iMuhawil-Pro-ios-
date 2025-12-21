@@ -1,4 +1,4 @@
-name: Build Android APK (Root Fix)
+name: Build Android APK (Template Injection Fix)
 
 on:
   workflow_dispatch:
@@ -14,9 +14,9 @@ jobs:
         with:
           python-version: '3.11'
 
-      # نستخدم Flet 0.21.2 المتوافق
+      # نستخدم أحدث نسخة من Flet
       - name: Install Flet
-        run: pip install flet==0.21.2
+        run: pip install flet
 
       - name: Setup Java
         uses: actions/setup-java@v3
@@ -24,16 +24,16 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      # نستخدم Flutter 3.16.9 (لأنه لا يسبب شاشة بيضاء)
+      # نستخدم Flutter 3.22.0 (حديث ومستقر)
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.16.9'
+          flutter-version: '3.22.0'
           channel: 'stable'
 
       - name: Create Requirements File
         run: |
-          echo "flet==0.21.2" > requirements.txt
+          echo "flet" > requirements.txt
           echo "certifi" >> requirements.txt
           echo "typing_extensions" >> requirements.txt
           echo "urllib3" >> requirements.txt
@@ -52,35 +52,37 @@ jobs:
             echo "Warning: icon.png not found! Using default."
           fi
 
-      - name: FORCE UPDATE FLUTTER TEMPLATES (The Magic Trick)
-        # هذه الخطوة تقوم بتعديل القوالب الداخلية لـ Flutter
-        # لنجبرها على استخدام SDK 34 وحل مشكلة توافق المكتبات
+      - name: INJECT IMPELLER DISABLE INTO FLUTTER (The Magic Trick)
+        # هذه الخطوة تبحث عن القالب الأصلي لملف AndroidManifest داخل Flutter
+        # وتضيف إليه كود تعطيل Impeller قبل أن يبدأ البناء
         run: |
           FLUTTER_HOME=$(dirname $(dirname $(which flutter)))
-          echo "Flutter is installed at: $FLUTTER_HOME"
+          echo "Flutter located at: $FLUTTER_HOME"
           
-          # البحث عن ملف القالب الخاص بالأندرويد
-          TEMPLATE_PATH="$FLUTTER_HOME/packages/flutter_tools/templates/app/android.tmpl/app/build.gradle"
+          # البحث عن قالب الـ Manifest
+          # نستخدم find لأن المسار قد يختلف قليلاً
+          TEMPLATE_FILE=$(find $FLUTTER_HOME -name "AndroidManifest.xml.tmpl" | grep "android.tmpl" | head -n 1)
           
-          if [ -f "$TEMPLATE_PATH" ]; then
-            echo "Found template at $TEMPLATE_PATH"
-            # استبدال نسخة SDK بالقوة
-            sed -i 's/compileSdkVersion .*/compileSdkVersion 34/g' "$TEMPLATE_PATH"
-            sed -i 's/targetSdkVersion .*/targetSdkVersion 34/g' "$TEMPLATE_PATH"
-            echo "Successfully injected SDK 34 into Flutter templates! 💉"
-          else
-            echo "Template not found! Trying alternative path..."
-            # مسار بديل قد يكون موجوداً في بعض النسخ
-            TEMPLATE_PATH_ALT="$FLUTTER_HOME/packages/flutter_tools/templates/app/android.tmpl/app/build.gradle.kts"
-            if [ -f "$TEMPLATE_PATH_ALT" ]; then
-               echo "Found Kotlin template."
-               sed -i 's/compileSdk = .*/compileSdk = 34/g' "$TEMPLATE_PATH_ALT"
-               sed -i 's/targetSdk = .*/targetSdk = 34/g' "$TEMPLATE_PATH_ALT"
-            fi
+          if [ -z "$TEMPLATE_FILE" ]; then
+             echo "Could not find AndroidManifest template! Trying generic search..."
+             TEMPLATE_FILE=$(find $FLUTTER_HOME -name "AndroidManifest.xml" | grep "templates" | head -n 1)
           fi
 
-      - name: Build APK (Auto Mode with Hacked Template)
-        # الآن نستخدم البناء التلقائي، وسيقوم بإنشاء المشروع بناءً على القالب المعدل
+          if [ -z "$TEMPLATE_FILE" ]; then
+             echo "Error: Critical template file not found. Skipping injection (Fix might fail)."
+          else
+             echo "Injecting fix into: $TEMPLATE_FILE"
+             
+             # الكود السحري: إضافة meta-data لتعطيل Impeller
+             # نقوم بحقن السطر قبل وسم إغلاق </application>
+             sed -i 's|</application>|        <meta-data android:name="io.flutter.embedding.android.EnableImpeller" android:value="false" />\n    </application>|g' "$TEMPLATE_FILE"
+             
+             echo "Injection Successful! Impeller will be disabled by default. 💉✅"
+             cat "$TEMPLATE_FILE" | grep "EnableImpeller"
+          fi
+
+      - name: Build APK (Auto Mode)
+        # الآن نستخدم البناء التلقائي، وسيقوم باستخدام القالب المعدل أعلاه
         run: |
           flet build apk . --project StudentApp --product "المتابع المدرسي" --verbose
 
