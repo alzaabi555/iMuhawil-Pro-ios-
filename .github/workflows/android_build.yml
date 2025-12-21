@@ -1,4 +1,4 @@
-name: Build Android APK (Corrected Open Box)
+name: Build Android APK (Root Template Hack)
 
 on:
   workflow_dispatch:
@@ -23,93 +23,123 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      # نستخدم Flutter 3.22 (الأحدث)
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
           flutter-version: '3.22.0'
           channel: 'stable'
 
-      - name: Prepare Files
+      - name: Create Requirements
         run: |
-          rm -rf build_dir
-          mkdir build_dir
-          cp main.py build_dir/
-          if [ -f "icon.png" ]; then cp icon.png build_dir/; fi
-          echo "flet" > build_dir/requirements.txt
-          echo "openpyxl" >> build_dir/requirements.txt
+          echo "flet" > requirements.txt
+          echo "openpyxl" >> requirements.txt
 
-      - name: GENERATE FLUTTER PROJECT
+      - name: Prepare Icon
         run: |
-          cd build_dir
-          # تم التصحيح: أزلنا --org لأنه غير مدعوم
-          flet create . --project StudentApp --description "المتابع المدرسي"
+          if [ -f "icon.png" ]; then
+            echo "Icon found! ✅"
+            mkdir -p assets
+            cp icon.png assets/icon.png
+          fi
 
-      - name: FORCE MANIFEST PATCH (White Screen Fix)
+      - name: HACK FLUTTER TEMPLATES (The God Mode Fix)
         shell: python
         run: |
           import os
-          
-          # البحث الديناميكي عن ملف المانيفيست
-          search_dir = "build_dir"
-          manifest_path = None
-          
-          for root, dirs, files in os.walk(search_dir):
-              if "AndroidManifest.xml" in files and "src/main" in root:
-                  manifest_path = os.path.join(root, "AndroidManifest.xml")
-                  break
-          
-          if not manifest_path:
-              print("Error: Could not find generated AndroidManifest.xml")
-              exit(1)
-              
-          print(f"Found Manifest at: {manifest_path}")
-          
-          with open(manifest_path, "r") as f:
-              content = f.read()
-              
-          # 1. أهم خطوة: السماح بالاتصال المحلي (Cleartext)
-          # هذا هو السبب الرئيسي للشاشة البيضاء في Flet
-          if 'android:usesCleartextTraffic="true"' not in content:
-              content = content.replace("<application", '<application android:usesCleartextTraffic="true"')
-              print("Critical Fix: Cleartext Traffic Enabled ✅")
+          import shutil
 
-          # 2. إضافة أذونات الإنترنت والتخزين
+          # 1. تحديد مكان Flutter في السيرفر
+          flutter_bin = shutil.which("flutter")
+          flutter_home = os.path.dirname(os.path.dirname(flutter_bin))
+          print(f"Flutter Home: {flutter_home}")
+
+          # 2. البحث عن القالب الأصلي (AndroidManifest.xml.tmpl)
+          # هذا الملف هو "الأم" التي يولد منها Flutter كل المشاريع
+          template_path = None
+          for root, dirs, files in os.walk(flutter_home):
+              for file in files:
+                  if file == "AndroidManifest.xml.tmpl" and "app/src/main" in root:
+                      template_path = os.path.join(root, file)
+                      break
+              if template_path: break
+
+          if not template_path:
+              print("Error: Could not find Flutter templates! Trying fallback search...")
+              for root, dirs, files in os.walk(flutter_home):
+                  if file == "AndroidManifest.xml.tmpl":
+                       template_path = os.path.join(root, file)
+                       break
+          
+          if not template_path:
+              print("FATAL: Template not found. Script cannot continue.")
+              exit(1)
+
+          print(f"Hacking Template at: {template_path}")
+
+          with open(template_path, "r") as f:
+              content = f.read()
+
+          # --- التعديل 1: السماح بالاتصال المحلي (Cleartext) ---
+          # هذا هو السبب رقم 1 للشاشة البيضاء في تطبيقات Flet
+          if 'android:usesCleartextTraffic="true"' not in content:
+              content = content.replace('<application', '<application android:usesCleartextTraffic="true"')
+              print("Fix 1: Cleartext Traffic Enabled (In Template) ✅")
+
+          # --- التعديل 2: إضافة أذونات الإنترنت ---
           permissions = '''
           <uses-permission android:name="android.permission.INTERNET"/>
           <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
           <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
           '''
-          
           if "android.permission.INTERNET" not in content:
               content = content.replace("<application", f"{permissions}\n    <application")
-              print("Permissions Injected ✅")
-              
-          # 3. تعطيل Impeller (احتياط)
-          impeller_tag = '<meta-data android:name="io.flutter.embedding.android.EnableImpeller" android:value="false" />'
-          if "EnableImpeller" not in content:
-               content = content.replace("</application>", f"    {impeller_tag}\n    </application>")
-               print("Impeller Disabled ✅")
+              print("Fix 2: Permissions Injected (In Template) ✅")
 
-          # 4. تعريب الاسم
-          content = content.replace('android:label="StudentApp"', 'android:label="المتابع المدرسي"')
-          
-          with open(manifest_path, "w") as f:
+          # --- التعديل 3: تعطيل Impeller ---
+          impeller_fix = '        <meta-data android:name="io.flutter.embedding.android.EnableImpeller" android:value="false" />'
+          if "EnableImpeller" not in content:
+              content = content.replace("</application>", f"{impeller_fix}\n    </application>")
+              print("Fix 3: Impeller Disabled (In Template) ✅")
+
+          # حفظ التعديلات في القالب الأم
+          with open(template_path, "w") as f:
               f.write(content)
 
-      - name: BUILD APK MANUALLY
+          # --- التعديل 4: إجبار Gradle على SDK 34 ---
+          # نبحث عن قالب build.gradle.kts.tmpl أو build.gradle.tmpl
+          gradle_template = None
+          for root, dirs, files in os.walk(flutter_home):
+               if "build.gradle" in files or "build.gradle.kts.tmpl" in files:
+                   # بحث عن ملفات القوالب التي تحتوي على compileSdkVersion
+                   for f_name in files:
+                       if "gradle" in f_name:
+                           path = os.path.join(root, f_name)
+                           with open(path, 'r') as f:
+                               if "compileSdkVersion" in f.read() or "compileSdk" in f.read():
+                                   gradle_template = path
+                                   break
+               if gradle_template: break
+          
+          if gradle_template:
+              print(f"Hacking Gradle Template at: {gradle_template}")
+              with open(gradle_template, "r") as f:
+                  g_content = f.read()
+              
+              import re
+              g_content = re.sub(r'compileSdkVersion .*', 'compileSdkVersion 34', g_content)
+              g_content = re.sub(r'targetSdkVersion .*', 'targetSdkVersion 34', g_content)
+              g_content = re.sub(r'compileSdk = .*', 'compileSdk = 34', g_content)
+              g_content = re.sub(r'targetSdk = .*', 'targetSdk = 34', g_content)
+
+              with open(gradle_template, "w") as f:
+                  f.write(g_content)
+              print("Fix 4: SDK Forced to 34 (In Template) ✅")
+
+      - name: Build APK (Auto Mode)
+        # الآن نستخدم البناء التلقائي، وسوف يرث التطبيق كل الإصلاحات من القالب المعدل
         run: |
-          # العثور على مجلد المشروع المولد
-          PROJECT_DIR=$(find build_dir -maxdepth 2 -type d -name "android" | xargs dirname)
-          echo "Project generated in: $PROJECT_DIR"
-          
-          cd "$PROJECT_DIR"
-          
-          # خطوة هامة: إضافة مكتبة flet لبيئة flutter
-          flutter pub add flet
-          flutter pub get
-          
-          # البناء النهائي
-          flutter build apk --release --verbose
+          flet build apk . --project StudentApp --product "المتابع المدرسي" --verbose
 
       - name: Find and Rename APK
         run: |
