@@ -29,9 +29,12 @@ export const convertPdfToHtml = async (file: File): Promise<string> => {
 
   try {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-    // Using the most capable model available (Gemini 3 Pro Preview)
-    const modelId = 'gemini-3-pro-preview'; 
-
+    
+    // Priority list of models. If the first one fails (Quota/Error), we try the next.
+    // 1. gemini-3-flash-preview: Latest, fast, but might be unstable/limited.
+    // 2. gemini-1.5-flash: Very stable, high limits, reliable fallback.
+    const models = ['gemini-3-flash-preview', 'gemini-1.5-flash'];
+    
     let pdfPart;
     try {
       pdfPart = await fileToGenerativePart(file);
@@ -70,76 +73,91 @@ export const convertPdfToHtml = async (file: File): Promise<string> => {
     Convert the attached PDF document now.
     `;
 
-    const maxRetries = 3;
     let lastError: any = null;
 
-    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    // Loop through models as fallback mechanism
+    for (const modelId of models) {
       try {
-        console.log(`Attempt ${attempt} to convert PDF...`);
-        const response = await ai.models.generateContent({
-          model: modelId,
-          contents: {
-            parts: [
-              pdfPart,
-              { text: prompt }
-            ]
-          },
-          config: {
-            // MAXIMUM Thinking Budget for Paid/Pro Plans.
-            // 32768 is the max for Gemini 3 Pro, allowing deepest possible reasoning for complex Arabic layouts.
-            thinkingConfig: { thinkingBudget: 32768 }, 
-            temperature: 0.1
+        console.log(`Attempting conversion using model: ${modelId}`);
+        
+        // Inner Retry Loop for transient network errors
+        const maxRetries = 2;
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+          try {
+            const response = await ai.models.generateContent({
+              model: modelId,
+              contents: {
+                parts: [
+                  pdfPart,
+                  { text: prompt }
+                ]
+              },
+              config: {
+                // Disable thinking to save tokens/quota
+                thinkingConfig: { thinkingBudget: 0 }, 
+                temperature: 0.1
+              }
+            });
+
+            const text = response.text;
+            if (!text) {
+              throw new Error("لم يتم استرجاع أي بيانات من الخادم.");
+            }
+
+            // Advanced Cleanup
+            const cleanHtml = text
+              .replace(/```html/g, '')
+              .replace(/```/g, '')
+              .trim();
+            
+            return cleanHtml; // Success! Return immediately.
+
+          } catch (innerError: any) {
+            console.warn(`Attempt ${attempt} with ${modelId} failed:`, innerError);
+            
+            // If it's a Quota error (429), break inner loop to try next model immediately
+            if (innerError.status === 429 || innerError.message?.includes('429') || innerError.message?.includes('quota')) {
+               throw innerError; 
+            }
+
+            // If network error, wait and retry same model
+            const errorMessage = innerError.toString().toLowerCase();
+            const isNetworkError = 
+              errorMessage.includes('xhr') || 
+              errorMessage.includes('fetch') || 
+              errorMessage.includes('500') || 
+              errorMessage.includes('503');
+
+            if (attempt < maxRetries && isNetworkError) {
+              await wait(attempt * 2000);
+              continue;
+            }
+            
+            throw innerError;
           }
-        });
-
-        const text = response.text;
-        if (!text) {
-          throw new Error("لم يتم استرجاع أي بيانات من الخادم.");
         }
-
-        // Advanced Cleanup
-        const cleanHtml = text
-          .replace(/```html/g, '')
-          .replace(/```/g, '')
-          .trim();
-        
-        return cleanHtml;
-
-      } catch (error: any) {
-        console.warn(`Attempt ${attempt} failed:`, error);
-        lastError = error;
-        
-        // Detect XHR/Network/Server errors
-        const errorMessage = error.toString().toLowerCase();
-        const isNetworkError = 
-          errorMessage.includes('xhr') || 
-          errorMessage.includes('fetch') || 
-          errorMessage.includes('500') || 
-          errorMessage.includes('503') ||
-          errorMessage.includes('rpc');
-
-        if (attempt < maxRetries && isNetworkError) {
-          const delayMs = attempt * 2000;
-          await wait(delayMs);
-          continue;
-        }
-        
-        // Break immediately for client errors (4xx) unless it's a rate limit (429)
-        if (errorMessage.includes('400') || (errorMessage.includes('4') && !errorMessage.includes('429'))) {
-          break;
-        }
+      } catch (modelError: any) {
+        console.error(`Model ${modelId} failed completely.`, modelError);
+        lastError = modelError;
+        // Continue to the next model in the list...
       }
     }
 
-    // Final Error Handling
-    if (lastError?.message?.includes('xhr') || lastError?.message?.includes('RPC')) {
-      throw new Error("حدث خطأ في الاتصال بالخادم (XHR Failed). قد يكون الملف كبيراً جداً أو الاتصال بطيئاً. حاول تقليل حجم الملف.");
+    // If all models failed
+    if (lastError) {
+        if (lastError.message?.includes('429') || lastError.message?.includes('quota')) {
+            throw new Error("تم تجاوز الحد المسموح به للاستخدام المجاني حالياً في جميع النماذج. يرجى الانتظار دقيقة والمحاولة مجدداً.");
+        }
+        throw lastError;
     }
+    
+    throw new Error("حدث خطأ غير معروف أثناء المعالجة.");
 
-    throw lastError;
-
-  } catch (error) {
-    console.error("Conversion Error:", error);
+  } catch (error: any) {
+    console.error("Final Conversion Error:", error);
+    if (error.message?.includes('429') || error.message?.includes('quota')) {
+       throw new Error("عفواً، الخوادم مشغولة جداً الآن (429). يرجى الانتظار قليلاً.");
+    }
     throw error;
   }
 };
