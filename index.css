@@ -1,0 +1,69 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-900 overflow-x-hidden;
+  }
+}
+
+/* iOS Safe Area Support */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+.pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+
+/* Custom Sticky Position that respects the Navbar height + Safe Area */
+.sticky-toolbar {
+  top: 4rem; /* Fallback for browsers without env() support (16 * 0.25rem = 4rem) */
+  top: calc(4rem + env(safe-area-inset-top));
+}
+
+/* Custom Scrollbar - Sleek */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent; 
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1; 
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8; 
+}
+
+/* A4 Paper Simulation */
+.a4-paper {
+  width: 210mm;
+  min-height: 297mm;
+  padding: 20mm; /* Standard Margins */
+  margin: 0 auto;
+  background: white;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025); /* Softer Shadow */
+  border-radius: 2px;
+}
+
+@media screen and (max-width: 850px) {
+  .a4-paper {
+    width: 100%;
+    padding: 10mm;
+    min-height: auto;
+    box-shadow: none;
+  }
+}
+
+/* Typography specifics for the editor */
+.word-content h1 { font-size: 24pt; font-weight: bold; margin-bottom: 12pt; color: #1e293b; }
+.word-content h2 { font-size: 18pt; font-weight: bold; margin-bottom: 10pt; color: #334155; }
+.word-content h3 { font-size: 14pt; font-weight: bold; margin-bottom: 8pt; color: #475569; }
+.word-content p { font-size: 12pt; line-height: 1.6; margin-bottom: 10pt; color: #0f172a; }
+.word-content table { width: 100%; border-collapse: collapse; margin-bottom: 12pt; }
+.word-content td, .word-content th { border: 1px solid #cbd5e1; padding: 8pt; vertical-align: top; }
+.word-content th { background-color: #f8fafc; font-weight: bold; }

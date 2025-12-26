@@ -1,0 +1,5 @@
+{
+  "name": "Muhawil - Arabic PDF to Word",
+  "description": "A high-precision Arabic PDF to Word converter using Gemini AI to preserve text, formatting, and tables.",
+  "requestFramePermissions": []
+}
