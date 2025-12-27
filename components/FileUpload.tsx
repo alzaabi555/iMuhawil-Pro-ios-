@@ -1,5 +1,5 @@
 import React from 'react';
-import { UploadCloud, FileType, AlertCircle } from 'lucide-react';
+import { UploadCloud, FileType, AlertCircle, Zap } from 'lucide-react';
 
 interface FileUploadProps {
   onFileSelect: (file: File) => void;
@@ -10,8 +10,9 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect, disabled }
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
-      if (file.size > 10 * 1024 * 1024) {
-        alert('عذراً، حجم الملف يجب أن يكون أقل من 10 ميجابايت');
+      // Tier 1 allows for larger files processing
+      if (file.size > 20 * 1024 * 1024) {
+        alert('عذراً، حجم الملف يجب أن يكون أقل من 20 ميجابايت');
         return;
       }
       onFileSelect(file);
@@ -48,8 +49,9 @@ export const FileUpload: React.FC<FileUploadProps> = ({ onFileSelect, disabled }
             <p className="mb-2 text-lg font-semibold text-slate-700">
               اضغط للرفع أو اسحب الملف هنا
             </p>
-            <p className="text-sm text-slate-400 mb-4">
-              يدعم ملفات PDF فقط (الحد الأقصى 10 ميجابايت)
+            <p className="text-sm text-slate-400 mb-4 flex items-center gap-1 justify-center">
+               يدعم ملفات PDF حتى <span className="font-bold text-slate-600">20 ميجابايت</span>
+               <Zap size={12} className="text-amber-500 fill-amber-500" />
             </p>
             
             <div className="flex items-center gap-2 text-xs text-slate-400 bg-slate-50 px-3 py-1 rounded-full border border-slate-100">
