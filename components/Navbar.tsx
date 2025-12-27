@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { FileText, Info, X, Zap, Key, CheckCircle, ExternalLink, LogOut, ShieldCheck, Link as LinkIcon } from 'lucide-react';
+import { FileText, Info, X, Zap, Key, CheckCircle, ExternalLink, LogOut, ShieldCheck, Link as LinkIcon, Phone } from 'lucide-react';
 
 interface NavbarProps {
   fileName?: string;
@@ -251,8 +251,14 @@ export const Navbar: React.FC<NavbarProps> = ({ fileName }) => {
                 <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mb-1">
                   الإعداد والتصميم
                 </p>
-                <div className="inline-block px-4 py-1.5 bg-indigo-50 text-indigo-700 rounded-full text-sm font-bold shadow-sm border border-indigo-100">
-                  محمد زعابي
+                <div className="flex flex-col items-center gap-2">
+                  <div className="inline-block px-4 py-1.5 bg-indigo-50 text-indigo-700 rounded-full text-sm font-bold shadow-sm border border-indigo-100">
+                    محمد الزعابي
+                  </div>
+                  <a href="tel:98344555" className="text-xs font-medium text-slate-500 hover:text-indigo-600 transition-colors flex items-center gap-1 dir-ltr">
+                    <Phone size={12} />
+                    <span>98344555</span>
+                  </a>
                 </div>
               </div>
             </div>
