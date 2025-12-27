@@ -54,7 +54,7 @@ const App: React.FC = () => {
     }
   };
 
-  // Helper function to convert SVG strings to Base64 PNGs
+  // Robust function to convert SVGs to PNGs
   const processHtmlForExport = async (rawHtml: string): Promise<string> => {
     const parser = new DOMParser();
     const doc = parser.parseFromString(rawHtml, 'text/html');
@@ -62,54 +62,73 @@ const App: React.FC = () => {
 
     if (svgs.length === 0) return rawHtml;
 
-    // Process all SVGs sequentially
     const conversionPromises = Array.from(svgs).map(async (svg) => {
       return new Promise<void>((resolve) => {
         try {
-          const svgData = new XMLSerializer().serializeToString(svg);
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d');
-          const img = new Image();
-
-          // Get dimensions (fallback to 300x150 if not specified)
-          const width = svg.viewBox.baseVal?.width || svg.width.baseVal?.value || 300;
-          const height = svg.viewBox.baseVal?.height || svg.height.baseVal?.value || 150;
+          // 1. Ensure dimensions exist
+          let width = parseInt(svg.getAttribute('width') || '0');
+          let height = parseInt(svg.getAttribute('height') || '0');
           
-          // High resolution factor for printing
-          const scale = 3; 
-          canvas.width = width * scale;
-          canvas.height = height * scale;
+          // Fallback to viewBox if width/height are missing
+          if (!width || !height) {
+            const viewBox = svg.getAttribute('viewBox');
+            if (viewBox) {
+               const parts = viewBox.split(' ').map(parseFloat);
+               if (parts.length === 4) {
+                 width = parts[2];
+                 height = parts[3];
+               }
+            }
+          }
+          
+          // Final fallback
+          width = width || 300;
+          height = height || 150;
 
+          // Set Explicit dimensions on the SVG node before serializing
+          svg.setAttribute('width', width.toString());
+          svg.setAttribute('height', height.toString());
+          
+          // Ensure XML namespace exists
+          svg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+
+          const svgData = new XMLSerializer().serializeToString(svg);
           const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
           const url = URL.createObjectURL(svgBlob);
 
+          const img = new Image();
           img.onload = () => {
+            const canvas = document.createElement('canvas');
+            // 3x Scale for high quality in Word
+            canvas.width = width * 3;
+            canvas.height = height * 3;
+            const ctx = canvas.getContext('2d');
+            
             if (ctx) {
-              // Draw white background (Word doesn't like transparent PNGs sometimes)
+              // White background to prevent black artifacts in Word
               ctx.fillStyle = '#ffffff';
               ctx.fillRect(0, 0, canvas.width, canvas.height);
               ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
               
               const pngData = canvas.toDataURL('image/png');
-              
-              // Create replacement IMG tag
               const newImg = doc.createElement('img');
               newImg.src = pngData;
-              newImg.width = width; // Set display width to original size
+              // Set styles for Word to behave
+              newImg.width = width;
               newImg.height = height;
-              newImg.style.maxWidth = '100%';
-              newImg.style.height = 'auto';
+              newImg.style.width = `${width}px`;
+              newImg.style.height = `${height}px`;
+              newImg.style.display = 'block';
               
-              // Replace SVG with IMG
               svg.parentNode?.replaceChild(newImg, svg);
             }
             URL.revokeObjectURL(url);
             resolve();
           };
-
+          
           img.onerror = () => {
-            console.error('Failed to convert SVG to Image');
-            resolve(); // Resolve anyway to avoid hanging
+            console.warn('SVG load failed');
+            resolve();
           };
 
           img.src = url;
@@ -128,10 +147,11 @@ const App: React.FC = () => {
     if (!convertedDoc) return;
     setIsExporting(true);
     
-    // 1. Convert SVGs to PNGs for Word compatibility
+    // 1. Process Images
     const processedBodyContent = await processHtmlForExport(convertedDoc.htmlContent);
 
-    // Updated CSS: Explicit 2cm margins for all directions and generic @page support
+    // 2. Prepare HTML for Word
+    // Note: CSS updated to force NO BORDERS on the main document body
     const preHtml = `
       <html xmlns:o='urn:schemas-microsoft-com:office:office' 
             xmlns:w='urn:schemas-microsoft-com:office:word' 
@@ -141,46 +161,51 @@ const App: React.FC = () => {
         <meta charset="utf-8">
         <title>${convertedDoc.fileName}</title>
         <style>
-          /* General page defaults */
           @page { 
             size: 21cm 29.7cm; 
             margin: 2cm 2cm 2cm 2cm; 
             mso-page-orientation: portrait; 
           }
-          
-          /* Specific Section 1 definition - crucial for Word to apply margins correctly */
           @page Section1 {
-            size: 21cm 29.7cm;
+            size: 21cm 29.7cm; 
             margin: 2cm 2cm 2cm 2cm;
-            mso-header-margin: 36pt; 
-            mso-footer-margin: 36pt; 
+            mso-header-margin: 35.4pt; 
+            mso-footer-margin: 35.4pt; 
             mso-paper-source: 0;
           }
-
           body { 
             font-family: 'Times New Roman', Arial, sans-serif; 
-            font-size: 12pt; 
+            font-size: 14pt; 
+            border: none !important;
+            margin: 0;
+            padding: 0;
           }
           
-          /* Table styling to fit within margins */
+          /* Ensure the main container has no border */
+          div.Section1 { 
+            page: Section1; 
+            border: none !important;
+            box-shadow: none !important;
+          }
+
+          /* Keep tables borders intact */
           table { 
             border-collapse: collapse; 
             width: 100%; 
-            mso-border-alt: solid windowtext .5pt; 
-            margin-bottom: 12pt;
+            table-layout: fixed; 
+            margin-bottom: 15px;
           }
           td, th { 
             border: 1px solid #000; 
-            padding: 5pt; 
+            padding: 8px; 
+            vertical-align: top;
           }
-
-          /* Images */
+          
           img {
             max-width: 100%;
             height: auto;
+            display: inline-block;
           }
-          
-          div.Section1 { page: Section1; }
         </style>
       </head>
       <body>
@@ -189,41 +214,32 @@ const App: React.FC = () => {
       </html>
     `;
 
-    // 2. Mobile (iOS/Android) Share/Save Logic
+    // 3. Mobile (iOS/Android) Share
     if (Capacitor.isNativePlatform()) {
       try {
         const fileName = `${convertedDoc.fileName}.doc`;
-        
-        // Write file to Cache first (Best practice for sharing)
         const result = await Filesystem.writeFile({
           path: fileName,
           data: preHtml,
           directory: Directory.Cache,
           encoding: Encoding.UTF8,
         });
-        
-        // Open the Native Share Sheet
         await Share.share({
           title: fileName,
           text: 'تم تحويل الملف باستخدام Muhawil Pro',
-          url: result.uri, // This passes the local file path to the share sheet
-          dialogTitle: 'حفظ أو مشاركة الملف' // Android title
+          url: result.uri,
+          dialogTitle: 'حفظ الملف'
         });
-
       } catch (e) {
-        console.error("Share failed", e);
-        // Only alert if it's not a user cancellation (which is common in share sheets)
-        if (JSON.stringify(e).toLowerCase().includes('cancel')) {
-          setIsExporting(false);
-          return;
+        if (!JSON.stringify(e).toLowerCase().includes('cancel')) {
+          alert('حدث خطأ أثناء المشاركة.');
         }
-        alert('حدث خطأ أثناء محاولة المشاركة.');
       }
       setIsExporting(false);
       return;
     }
 
-    // 3. Web/Desktop Logic
+    // 4. Web Download
     const blob = new Blob(['\ufeff', preHtml], { type: 'application/msword' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -252,7 +268,6 @@ const App: React.FC = () => {
     setSaveStatus('');
   };
 
-  // Simple Action Button Component
   const ToolButton = ({ icon: Icon, onClick, active = false, title, danger = false }: any) => (
     <button 
       onClick={onClick}
@@ -272,10 +287,7 @@ const App: React.FC = () => {
       
       <Navbar fileName={convertedDoc?.fileName} />
 
-      {/* Main Container */}
       <main className="flex-1 flex flex-col relative">
-        
-        {/* Offline Warning */}
         {!isOnline && (
           <div className="w-full bg-amber-50 border-b border-amber-200 text-amber-800 px-4 py-2 flex justify-center items-center gap-2 text-sm">
             <WifiOff size={16} />
@@ -283,12 +295,10 @@ const App: React.FC = () => {
           </div>
         )}
 
-        {/* State: IDLE (Upload) */}
         {status === ProcessingStatus.IDLE && (
            <FileUpload onFileSelect={handleFileSelect} disabled={!isOnline} />
         )}
 
-        {/* State: PROCESSING */}
         {status === ProcessingStatus.PROCESSING && (
            <div className="flex-1 flex flex-col items-center justify-center p-8 animate-fade-in">
              <div className="bg-white p-10 rounded-3xl shadow-xl text-center max-w-sm border border-slate-100">
@@ -300,19 +310,16 @@ const App: React.FC = () => {
                </div>
                <h3 className="text-xl font-bold text-slate-800 mb-3">جاري المعالجة...</h3>
                <p className="text-slate-500 text-sm leading-relaxed">
-                 يقوم الذكاء الاصطناعي الآن بقراءة الملف وتحويله إلى صيغة قابلة للتعديل.
+                 نقوم الآن بإعادة رسم الجداول والمخططات لتتوافق مع Microsoft Word.
                </p>
              </div>
            </div>
         )}
 
-        {/* State: COMPLETE (Editor & Toolbar) */}
         {status === ProcessingStatus.COMPLETE && convertedDoc && (
           <div className="flex flex-col items-center w-full animate-fade-in-up">
             
-            {/* Sticky Simple Toolbar */}
             <div className="sticky-toolbar sticky z-30 w-full bg-white/90 backdrop-blur border-b border-slate-200 shadow-sm px-4 md:px-8 py-2 flex items-center justify-between gap-4">
-              
               <div className="flex items-center gap-2 border-l border-slate-200 pl-4 ml-2">
                 <button 
                   onClick={handleReset}
@@ -323,7 +330,6 @@ const App: React.FC = () => {
                 </button>
               </div>
 
-              {/* Formatting Tools (Visual Only in this version) */}
               <div className="flex items-center bg-slate-100 rounded-lg p-1 gap-1">
                 <ToolButton icon={Bold} title="غامق" />
                 <ToolButton icon={Italic} title="مائل" />
@@ -334,7 +340,6 @@ const App: React.FC = () => {
                 <ToolButton icon={AlignLeft} title="يسار" />
               </div>
 
-              {/* Actions */}
               <div className="flex items-center gap-2">
                 <button 
                   onClick={handleCopy}
@@ -374,15 +379,12 @@ const App: React.FC = () => {
               </div>
             </div>
 
-            {/* Document Preview Area */}
             <div className="w-full max-w-5xl p-4 md:p-8">
                <PreviewEditor htmlContent={convertedDoc.htmlContent} />
             </div>
-
           </div>
         )}
 
-        {/* State: ERROR */}
         {status === ProcessingStatus.ERROR && (
           <div className="flex-1 flex flex-col items-center justify-center p-8 animate-fade-in">
             <div className="bg-white p-8 rounded-2xl shadow-lg border border-red-100 max-w-md text-center">
@@ -401,7 +403,6 @@ const App: React.FC = () => {
             </div>
           </div>
         )}
-
       </main>
     </div>
   );
