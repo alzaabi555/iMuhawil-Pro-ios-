@@ -12,7 +12,8 @@
     "electron:dev": "concurrently \"npm run dev\" \"wait-on tcp:5173 && electron .\"",
     "electron:build": "vite build && electron-builder",
     "android:build": "vite build && npx cap sync android && cd android && ./gradlew assembleDebug",
-    "ios:build": "vite build && npx cap sync ios && npx cap open ios"
+    "ios:build": "vite build && npx cap sync ios && npx cap open ios",
+    "generate-icons": "capacitor-assets generate --icon public/icon.png --ios --android"
   },
   "dependencies": {
     "@capacitor/android": "^5.0.0",
@@ -26,6 +27,7 @@
     "react-dom": "^18.2.0"
   },
   "devDependencies": {
+    "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^5.0.0",
     "@types/react": "^18.2.37",
     "@types/react-dom": "^18.2.15",
