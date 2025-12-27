@@ -30,10 +30,10 @@ export const convertPdfToHtml = async (file: File): Promise<string> => {
   try {
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     
-    // Priority list of models. If the first one fails (Quota/Error), we try the next.
-    // 1. gemini-3-flash-preview: Latest, fast, but might be unstable/limited.
-    // 2. gemini-1.5-flash: Very stable, high limits, reliable fallback.
-    const models = ['gemini-3-flash-preview', 'gemini-1.5-flash'];
+    // Priority list of models.
+    // gemini-2.0-flash-thinking-exp: Best for reasoning about geometry and generating SVG code.
+    // gemini-1.5-pro: Strong fallback for vision.
+    const models = ['gemini-2.0-flash-thinking-exp', 'gemini-1.5-pro-latest', 'gemini-1.5-flash'];
     
     let pdfPart;
     try {
@@ -43,34 +43,34 @@ export const convertPdfToHtml = async (file: File): Promise<string> => {
     }
 
     const prompt = `
-    You are a professional Document Conversion Engine specialized in Arabic PDF to Word transformation.
+    You are an expert Educational Document Digitizer specialized in Arabic Mathematics.
     
-    Target: Create a high-fidelity HTML document structure that Microsoft Word can interpret perfectly.
+    Target: Convert the provided PDF exam paper into a high-fidelity HTML document compatible with MS Word.
 
-    STRICT REQUIREMENTS:
-    1. **Structure**: Return ONLY the HTML <body> content. Do NOT wrap in <html> or <head>.
-    2. **Language**: The content is ARABIC. Force 'dir="rtl"' and 'text-align: right' styles on paragraphs.
-    3. **Layout Accuracy**:
-       - Preserve headings (h1, h2, h3).
-       - Preserve Bold, Italic, and Underline.
-       - Preserve font sizes relative to the original.
-    4. **Tables (CRITICAL)**:
-       - Use standard HTML <table>, <tr>, <td>.
-       - You MUST add 'border="1"' to the table tag.
-       - Add style="border-collapse: collapse; width: 100%;" to tables.
-       - Ensure complex merged cells (rowspan/colspan) are accurate.
-    5. **Images**: 
-       - If you encounter diagrams or photos, insert a placeholder: <div style="padding: 20px; border: 1px dashed #666; background: #eee; text-align: center;">[صورة/رسم بياني هنا]</div>.
-    6. **Cleanliness**: Do not output markdown code blocks (like \`\`\`html). Just the raw HTML string.
+    CRITICAL RULES FOR DRAWINGS (SVG GENERATION):
+    The document contains mathematical geometry (Triangles, Circles, Parallel lines, Angles, Coordinate systems).
+    1. **DO NOT** use image placeholders.
+    2. **DO NOT** describe the image in text.
+    3. **YOU MUST DRAW** these shapes using **Inline SVG Code**.
+    
+    SVG Guidelines:
+    - Use <svg> tags with proper viewBox.
+    - **Stroke**: Black (#000000), stroke-width="2".
+    - **Fill**: transparent (none), unless the shape is shaded in the PDF (use light gray #eee).
+    - **Labels**: You MUST include the labels (أ, ب, ج, س, 5cm, 30°) inside the SVG using <text> tags. Position them accurately relative to the lines.
+    - **Complexity**: Simplify complex sketches into clean geometric vector lines.
+    - **Dimensions**: Keep SVGs responsive (e.g., width="200px" or similar appropriate size).
 
-    7. **ARABIC OCR CORRECTION (VERY IMPORTANT)**:
-       You must contextually fix common PDF extraction errors in Arabic ligatures:
-       - **Fix "Alif-Lam" (ال)**: Convert "امل" to "الم" when it signifies "Alif-Lam-Mim" (e.g., correct "املفاهيم" -> "المفاهيم", "املخرجات" -> "المخرجات", "املعلم" -> "المعلم").
-       - **Fix "Lam-Alif" (لا)**: Convert "الح" or "ال" patterns that should be "La" (e.g., correct "تالحظ" -> "تلاحظ", "عالمات" -> "علامات", "ال يوجد" -> "لا يوجد").
-       - **Fix Broken Hamzas**: Fix detached Alif/Hamza (e.g., correct "األهداف" -> "الأهداف", "األول" -> "الأول", "اإلجابة" -> "الإجابة").
-       - **General**: Ensure words are spelled correctly according to standard Arabic morphology.
+    TEXT & LAYOUT RULES:
+    1. **Structure**: Return ONLY the HTML <body> content.
+    2. **Language**: Arabic (dir="rtl").
+    3. **Formatting**: Preserve H1/H2 headings, Bold, and Font sizes.
+    4. **Tables**: Use standard HTML tables with border="1" style="border-collapse: collapse; width: 100%;". Ensure numbers inside tables are correct.
+    5. **Correction**: 
+       - Fix Arabic OCR errors (e.g., "امل" -> "الم", broken Hamzas).
+       - Ensure math numbers are consistent (either Hindi ١٢٣ or Arabic 123 as per document).
 
-    Convert the attached PDF document now.
+    Output raw HTML only. No markdown blocks.
     `;
 
     let lastError: any = null;
@@ -93,8 +93,8 @@ export const convertPdfToHtml = async (file: File): Promise<string> => {
                 ]
               },
               config: {
-                // Disable thinking to save tokens/quota
-                thinkingConfig: { thinkingBudget: 0 }, 
+                // Thinking budget helps with complex geometry calculation (only for supported models)
+                thinkingConfig: modelId.includes('thinking') ? { thinkingBudget: 1024 } : undefined, 
                 temperature: 0.1
               }
             });
@@ -146,7 +146,7 @@ export const convertPdfToHtml = async (file: File): Promise<string> => {
     // If all models failed
     if (lastError) {
         if (lastError.message?.includes('429') || lastError.message?.includes('quota')) {
-            throw new Error("تم تجاوز الحد المسموح به للاستخدام المجاني حالياً في جميع النماذج. يرجى الانتظار دقيقة والمحاولة مجدداً.");
+            throw new Error("تم تجاوز الحد المسموح به للاستخدام المجاني حالياً. يرجى الانتظار دقيقة والمحاولة مجدداً.");
         }
         throw lastError;
     }
