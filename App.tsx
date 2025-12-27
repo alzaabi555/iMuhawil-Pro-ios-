@@ -6,10 +6,11 @@ import { convertPdfToHtml } from './services/geminiService';
 import { ProcessingStatus, ConvertedDocument } from './types';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
+import { Share } from '@capacitor/share';
 import { 
   Loader2, WifiOff, FileDown, RefreshCw, Copy, Check, 
   Bold, Italic, Underline, AlignRight, AlignCenter, AlignLeft, 
-  Printer, ArrowRight, Download
+  Printer, ArrowRight, Download, Share as ShareIcon
 } from 'lucide-react';
 
 const App: React.FC = () => {
@@ -55,6 +56,7 @@ const App: React.FC = () => {
   const handleDownload = async () => {
     if (!convertedDoc) return;
     
+    // Updated CSS: Explicit 2cm margins for all directions and generic @page support
     const preHtml = `
       <html xmlns:o='urn:schemas-microsoft-com:office:office' 
             xmlns:w='urn:schemas-microsoft-com:office:word' 
@@ -64,10 +66,40 @@ const App: React.FC = () => {
         <meta charset="utf-8">
         <title>${convertedDoc.fileName}</title>
         <style>
-          @page { size: 21cm 29.7cm; margin: 2.54cm; mso-page-orientation: portrait; }
-          body { font-family: 'Times New Roman', Arial, sans-serif; font-size: 12pt; }
-          table { border-collapse: collapse; width: 100%; mso-border-alt: solid windowtext .5pt; }
-          td, th { border: 1px solid #000; padding: 5pt; }
+          /* General page defaults */
+          @page { 
+            size: 21cm 29.7cm; 
+            margin: 2cm 2cm 2cm 2cm; 
+            mso-page-orientation: portrait; 
+          }
+          
+          /* Specific Section 1 definition - crucial for Word to apply margins correctly */
+          @page Section1 {
+            size: 21cm 29.7cm;
+            margin: 2cm 2cm 2cm 2cm;
+            mso-header-margin: 36pt; 
+            mso-footer-margin: 36pt; 
+            mso-paper-source: 0;
+          }
+
+          body { 
+            font-family: 'Times New Roman', Arial, sans-serif; 
+            font-size: 12pt; 
+          }
+          
+          /* Table styling to fit within margins */
+          table { 
+            border-collapse: collapse; 
+            width: 100%; 
+            mso-border-alt: solid windowtext .5pt; 
+            margin-bottom: 12pt;
+          }
+          td, th { 
+            border: 1px solid #000; 
+            padding: 5pt; 
+          }
+          
+          div.Section1 { page: Section1; }
         </style>
       </head>
       <body>
@@ -76,23 +108,32 @@ const App: React.FC = () => {
       </html>
     `;
 
-    // 1. Mobile (iOS/Android) Save Logic
+    // 1. Mobile (iOS/Android) Share/Save Logic
     if (Capacitor.isNativePlatform()) {
       try {
         const fileName = `${convertedDoc.fileName}.doc`;
-        await Filesystem.writeFile({
+        
+        // Write file to Cache first (Best practice for sharing)
+        const result = await Filesystem.writeFile({
           path: fileName,
           data: preHtml,
-          directory: Directory.Documents,
+          directory: Directory.Cache,
           encoding: Encoding.UTF8,
         });
         
-        setSaveStatus(`تم الحفظ في المستندات: ${fileName}`);
-        setTimeout(() => setSaveStatus(''), 4000);
-        alert(`تم حفظ الملف بنجاح في مجلد المستندات باسم: ${fileName}`);
+        // Open the Native Share Sheet
+        await Share.share({
+          title: fileName,
+          text: 'تم تحويل الملف باستخدام Muhawil Pro',
+          url: result.uri, // This passes the local file path to the share sheet
+          dialogTitle: 'حفظ أو مشاركة الملف' // Android title
+        });
+
       } catch (e) {
-        console.error("Save failed", e);
-        alert('فشل حفظ الملف. يرجى التأكد من صلاحيات الوصول للملفات.');
+        console.error("Share failed", e);
+        // Only alert if it's not a user cancellation (which is common in share sheets)
+        if (JSON.stringify(e).toLowerCase().includes('cancel')) return;
+        alert('حدث خطأ أثناء محاولة المشاركة.');
       }
       return;
     }
@@ -153,13 +194,6 @@ const App: React.FC = () => {
           <div className="w-full bg-amber-50 border-b border-amber-200 text-amber-800 px-4 py-2 flex justify-center items-center gap-2 text-sm">
             <WifiOff size={16} />
             <span>لا يوجد اتصال بالإنترنت</span>
-          </div>
-        )}
-
-        {/* Save Status Notification (Mobile) */}
-        {saveStatus && (
-          <div className="fixed top-20 left-1/2 transform -translate-x-1/2 bg-green-600 text-white px-6 py-2 rounded-full shadow-lg z-50 text-sm animate-fade-in-up">
-            {saveStatus}
           </div>
         )}
 
@@ -236,8 +270,8 @@ const App: React.FC = () => {
                   onClick={handleDownload}
                   className="flex items-center gap-2 px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg shadow-md shadow-indigo-200 transition-all transform hover:scale-105 font-medium text-sm"
                 >
-                  <Download size={18} />
-                  <span>{Capacitor.isNativePlatform() ? 'حفظ' : 'تحميل Word'}</span>
+                  {Capacitor.isNativePlatform() ? <ShareIcon size={18} /> : <Download size={18} />}
+                  <span>{Capacitor.isNativePlatform() ? 'حفظ / مشاركة' : 'تحميل Word'}</span>
                 </button>
               </div>
             </div>

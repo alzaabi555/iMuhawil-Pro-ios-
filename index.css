@@ -43,7 +43,7 @@
 .a4-paper {
   width: 210mm;
   min-height: 297mm;
-  padding: 20mm; /* Standard Margins */
+  padding: 2cm; /* Updated to 2cm per request */
   margin: 0 auto;
   background: white;
   box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025); /* Softer Shadow */
