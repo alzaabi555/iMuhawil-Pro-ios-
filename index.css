@@ -5,6 +5,10 @@
 @layer base {
   body {
     @apply bg-slate-50 text-slate-900 overflow-x-hidden;
+    background-image: 
+      radial-gradient(circle at 15% 50%, rgba(99, 102, 241, 0.08) 0%, transparent 25%), 
+      radial-gradient(circle at 85% 30%, rgba(168, 85, 247, 0.08) 0%, transparent 25%);
+    background-attachment: fixed;
   }
 }
 
@@ -17,53 +21,159 @@
   padding-top: env(safe-area-inset-top);
 }
 
-/* Custom Sticky Position that respects the Navbar height + Safe Area */
-.sticky-toolbar {
-  top: 4rem; /* Fallback for browsers without env() support (16 * 0.25rem = 4rem) */
-  top: calc(4rem + env(safe-area-inset-top));
-}
-
-/* Custom Scrollbar - Sleek */
+/* Custom Scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 ::-webkit-scrollbar-track {
   background: transparent; 
 }
 ::-webkit-scrollbar-thumb {
   background: #cbd5e1; 
-  border-radius: 4px;
+  border-radius: 10px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #94a3b8; 
+  background: #6366f1; 
 }
 
-/* A4 Paper Simulation */
+/* Glassmorphism Utilities */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+/* 
+   LUXURY A4 PAPER SIMULATION 
+   - Added realistic shadows
+   - Improved mobile responsiveness
+*/
 .a4-paper {
   width: 210mm;
   min-height: 297mm;
-  padding: 2cm; /* Updated to 2cm per request */
+  padding: 2.5cm 2cm; /* Increased top/bottom padding for better breathing room */
   margin: 0 auto;
-  background: white;
-  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.05), 0 4px 6px -2px rgba(0, 0, 0, 0.025); /* Softer Shadow */
-  border-radius: 2px;
+  background: #ffffff;
+  position: relative;
+  
+  /* Realistic Layered Shadow */
+  box-shadow: 
+    /* Close shadow for sharpness */
+    0 1px 2px rgba(0, 0, 0, 0.05), 
+    /* Medium shadow for depth */
+    0 10px 20px rgba(0, 0, 0, 0.05),
+    /* Large diffuse shadow for elevation */
+    0 25px 50px -12px rgba(67, 56, 202, 0.15),
+    /* Subtle outline */
+    0 0 0 1px rgba(0, 0, 0, 0.01);
+    
+  border-radius: 2px; /* Paper isn't perfectly sharp */
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
 }
 
+/* Typography specifics for the editor - Enhanced for Luxury Feel */
+.word-content {
+  font-family: 'Times New Roman', 'Cairo', serif; /* Use serif for that "Document" feel */
+  color: #1e293b;
+}
+
+.word-content h1 { 
+  font-size: 24pt; 
+  font-weight: 800; 
+  margin-bottom: 16pt; 
+  color: #0f172a;
+  letter-spacing: -0.5px;
+  line-height: 1.2;
+}
+
+.word-content h2 { 
+  font-size: 18pt; 
+  font-weight: 700; 
+  margin-bottom: 12pt; 
+  color: #1e293b;
+  border-bottom: 2px solid #f1f5f9;
+  padding-bottom: 4pt;
+}
+
+.word-content h3 { 
+  font-size: 14pt; 
+  font-weight: 700; 
+  margin-bottom: 8pt; 
+  color: #334155; 
+}
+
+.word-content p { 
+  font-size: 12pt; 
+  line-height: 1.8; /* Better readability */
+  margin-bottom: 12pt; 
+  color: #334155;
+  text-align: justify;
+}
+
+/* Beautiful Table Styling */
+.word-content table { 
+  width: 100%; 
+  border-collapse: separate; 
+  border-spacing: 0;
+  margin-bottom: 16pt; 
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+}
+
+.word-content td, .word-content th { 
+  border: 1px solid #e2e8f0; 
+  padding: 10pt; 
+  vertical-align: top; 
+}
+
+.word-content th { 
+  background-color: #f8fafc; 
+  font-weight: 700; 
+  color: #475569;
+  text-align: right;
+}
+
+/* Mobile Adjustments */
 @media screen and (max-width: 850px) {
   .a4-paper {
     width: 100%;
-    padding: 10mm;
-    min-height: auto;
-    box-shadow: none;
+    padding: 20px; /* Use px for mobile */
+    min-height: 60vh;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+    border-radius: 12px; /* Softer corners on mobile */
   }
 }
 
-/* Typography specifics for the editor */
-.word-content h1 { font-size: 24pt; font-weight: bold; margin-bottom: 12pt; color: #1e293b; }
-.word-content h2 { font-size: 18pt; font-weight: bold; margin-bottom: 10pt; color: #334155; }
-.word-content h3 { font-size: 14pt; font-weight: bold; margin-bottom: 8pt; color: #475569; }
-.word-content p { font-size: 12pt; line-height: 1.6; margin-bottom: 10pt; color: #0f172a; }
-.word-content table { width: 100%; border-collapse: collapse; margin-bottom: 12pt; }
-.word-content td, .word-content th { border: 1px solid #cbd5e1; padding: 8pt; vertical-align: top; }
-.word-content th { background-color: #f8fafc; font-weight: bold; }
+/* Animations */
+@keyframes pulse-soft {
+  0%, 100% { box-shadow: 0 0 0 0px rgba(99, 102, 241, 0.2); }
+  50% { box-shadow: 0 0 0 10px rgba(99, 102, 241, 0); }
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 3s infinite;
+}
+
+.text-gradient {
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-image: linear-gradient(135deg, #4f46e5 0%, #9333ea 100%);
+}
+
+.text-gradient-gold {
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-image: linear-gradient(135deg, #d97706 0%, #fbbf24 100%);
+}
