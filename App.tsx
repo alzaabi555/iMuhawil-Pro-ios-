@@ -151,7 +151,6 @@ const App: React.FC = () => {
     const processedBodyContent = await processHtmlForExport(convertedDoc.htmlContent);
 
     // 2. Prepare HTML for Word
-    // Note: CSS updated to force NO BORDERS on the main document body
     const preHtml = `
       <html xmlns:o='urn:schemas-microsoft-com:office:office' 
             xmlns:w='urn:schemas-microsoft-com:office:word' 
@@ -181,14 +180,12 @@ const App: React.FC = () => {
             padding: 0;
           }
           
-          /* Ensure the main container has no border */
           div.Section1 { 
             page: Section1; 
             border: none !important;
             box-shadow: none !important;
           }
 
-          /* Keep tables borders intact */
           table { 
             border-collapse: collapse; 
             width: 100%; 
@@ -218,12 +215,17 @@ const App: React.FC = () => {
     if (Capacitor.isNativePlatform()) {
       try {
         const fileName = `${convertedDoc.fileName}.doc`;
+        
+        // IMPORTANT: Add BOM (\uFEFF) so mobile apps recognize UTF-8 content
+        const dataToWrite = '\uFEFF' + preHtml;
+
         const result = await Filesystem.writeFile({
           path: fileName,
-          data: preHtml,
+          data: dataToWrite, 
           directory: Directory.Cache,
           encoding: Encoding.UTF8,
         });
+        
         await Share.share({
           title: fileName,
           text: 'تم تحويل الملف باستخدام Muhawil Pro',
@@ -240,6 +242,7 @@ const App: React.FC = () => {
     }
 
     // 4. Web Download
+    // Add BOM here as well for good measure
     const blob = new Blob(['\ufeff', preHtml], { type: 'application/msword' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
