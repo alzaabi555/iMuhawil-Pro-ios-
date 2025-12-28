@@ -7,6 +7,8 @@ import { ProcessingStatus, ConvertedDocument } from './types';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
+// @ts-ignore - Importing from esm.sh via importmap
+import { asBlob } from 'html-docx-js-typescript';
 import { 
   Loader2, WifiOff, RefreshCw, Copy, Check, 
   Bold, Italic, Underline, AlignRight, AlignCenter, AlignLeft, 
@@ -131,44 +133,65 @@ const App: React.FC = () => {
     return doc.body.innerHTML;
   };
 
+  const convertBlobToBase64 = (blob: Blob): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onerror = reject;
+      reader.onload = () => {
+        const result = reader.result as string;
+        // Remove the data URL prefix (e.g., "data:application/vnd.openxmlformats...;base64,")
+        const base64 = result.split(',')[1];
+        resolve(base64);
+      };
+      reader.readAsDataURL(blob);
+    });
+  };
+
   const handleDownload = async () => {
     if (!convertedDoc) return;
     setIsExporting(true);
     
-    const processedBodyContent = await processHtmlForExport(convertedDoc.htmlContent);
+    try {
+      const processedBodyContent = await processHtmlForExport(convertedDoc.htmlContent);
 
-    const preHtml = `
-      <html xmlns:o='urn:schemas-microsoft-com:office:office' 
-            xmlns:w='urn:schemas-microsoft-com:office:word' 
-            xmlns='http://www.w3.org/TR/REC-html40'
-            dir="rtl">
-      <head>
-        <meta charset="utf-8">
-        <title>${convertedDoc.fileName}</title>
-        <style>
-          @page { size: 21cm 29.7cm; margin: 2cm; mso-page-orientation: portrait; }
-          body { font-family: 'Times New Roman', Arial, sans-serif; font-size: 14pt; }
-          table { border-collapse: collapse; width: 100%; }
-          td, th { border: 1px solid #000; padding: 8px; }
-          img { max-width: 100%; height: auto; }
-        </style>
-      </head>
-      <body>
-        <div class="Section1">${processedBodyContent}</div>
-      </body>
-      </html>
-    `;
+      // Prepare HTML for DOCX conversion
+      // We wrap it in a standard HTML structure ensuring RTL support
+      const fullHtml = `
+        <!DOCTYPE html>
+        <html dir="rtl" lang="ar">
+        <head>
+          <meta charset="UTF-8">
+          <style>
+            body { font-family: 'Times New Roman', Arial, sans-serif; text-align: right; }
+            table { border-collapse: collapse; width: 100%; margin-bottom: 10px; }
+            td, th { border: 1px solid #000; padding: 5px; }
+            p { margin-bottom: 10px; line-height: 1.5; }
+          </style>
+        </head>
+        <body>
+          ${processedBodyContent}
+        </body>
+        </html>
+      `;
 
-    if (Capacitor.isNativePlatform()) {
-      try {
-        const fileName = `${convertedDoc.fileName}.doc`;
-        const dataToWrite = '\uFEFF' + preHtml;
+      // Generate a real .docx BLOB using the library
+      const docxBlob = await asBlob(fullHtml, {
+        orientation: 'portrait',
+        margins: { top: 720, right: 720, bottom: 720, left: 720 }, // Twistips (approx 0.5 inch)
+      });
+
+      // NOTE: We use .docx extension now, not .doc
+      const fileName = `${convertedDoc.fileName}.docx`;
+
+      if (Capacitor.isNativePlatform()) {
+        const base64Data = await convertBlobToBase64(docxBlob as Blob);
 
         const result = await Filesystem.writeFile({
           path: fileName,
-          data: dataToWrite, 
+          data: base64Data, 
           directory: Directory.Cache,
-          encoding: Encoding.UTF8,
+          // We do NOT assume UTF8 here because it's a binary file now.
+          // Capacitor treats data as Base64 when encoding is not provided or for binary writes.
         });
         
         await Share.share({
@@ -177,25 +200,25 @@ const App: React.FC = () => {
           url: result.uri,
           dialogTitle: 'حفظ الملف'
         });
-      } catch (e) {
-        if (!JSON.stringify(e).toLowerCase().includes('cancel')) {
-          alert('حدث خطأ أثناء المشاركة.');
-        }
+      } else {
+        // Web Fallback
+        const url = URL.createObjectURL(docxBlob as Blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(url);
       }
+    } catch (e) {
+      console.error("Export Error:", e);
+      if (!JSON.stringify(e).toLowerCase().includes('cancel')) {
+        alert('حدث خطأ أثناء إنشاء ملف الوورد.');
+      }
+    } finally {
       setIsExporting(false);
-      return;
     }
-
-    const blob = new Blob(['\ufeff', preHtml], { type: 'application/msword' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${convertedDoc.fileName}.doc`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-    setIsExporting(false);
   };
 
   const handleCopy = async () => {
