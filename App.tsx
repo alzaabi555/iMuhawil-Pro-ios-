@@ -291,7 +291,7 @@ const App: React.FC = () => {
         )}
 
         {status === ProcessingStatus.COMPLETE && convertedDoc && (
-          <div className="flex flex-col items-center w-full animate-fade-in-up pb-20 pt-24 px-4">
+          <div className="flex flex-col items-center w-full animate-fade-in-up pb-20 pt-safe-offset px-4">
             
             {/* Floating Toolbar */}
             <div className="sticky top-24 z-30 w-full max-w-4xl mx-auto mb-8">

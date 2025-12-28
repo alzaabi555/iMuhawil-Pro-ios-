@@ -21,6 +21,18 @@
   padding-top: env(safe-area-inset-top);
 }
 
+/* 
+   Dynamic Safe Area Utilities 
+   Calculates safe area + desired spacing to prevent notch overlap
+*/
+.pt-safe-nav {
+  padding-top: calc(env(safe-area-inset-top) + 1rem); /* Safe area + 16px */
+}
+
+.pt-safe-offset {
+  padding-top: calc(env(safe-area-inset-top) + 8rem); /* Safe area + ~128px for content body */
+}
+
 /* Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
@@ -35,6 +47,15 @@
 }
 ::-webkit-scrollbar-thumb:hover {
   background: #6366f1; 
+}
+
+/* Hide scrollbar utility */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
 /* Glassmorphism Utilities */
