@@ -7,7 +7,6 @@ import { ProcessingStatus, ConvertedDocument } from './types';
 import { Capacitor } from '@capacitor/core';
 import { Filesystem, Directory, Encoding } from '@capacitor/filesystem';
 import { Share } from '@capacitor/share';
-// @ts-ignore - Importing from esm.sh via importmap
 import { asBlob } from 'html-docx-js-typescript';
 import { 
   Loader2, WifiOff, RefreshCw, Copy, Check, 
